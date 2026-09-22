@@ -1,0 +1,134 @@
+{
+  "timestamp_generated_utc": "2026-09-22T19:42:18.541478+00:00",
+  "input_clean_bars": 58772,
+  "warmup_bars_trimmed": 127,
+  "valid_feature_bars": 58645,
+  "feature_channels": [
+    "ohlc_norm_open",
+    "ohlc_norm_high",
+    "ohlc_norm_low",
+    "ohlc_norm_close",
+    "volume_zscore",
+    "smi",
+    "ma_ribbon_slope",
+    "liquidity_distance",
+    "fvg_status"
+  ],
+  "train_set": {
+    "bars": 46900,
+    "start": "2021-09-28 10:00:00+00:00",
+    "end": "2025-09-16 14:30:00+00:00"
+  },
+  "test_set": {
+    "bars": 11681,
+    "start": "2025-09-18 01:00:00+00:00",
+    "end": "2026-09-22 12:00:00+00:00"
+  },
+  "buffer_gap": {
+    "purge_bars": 16,
+    "embargo_bars": 48,
+    "gap_hours": 34.5
+  },
+  "channel_validation": {
+    "ohlc_norm_open": {
+      "count": 58517,
+      "nan_count": "0",
+      "inf_count": 0,
+      "mean": 0.3241,
+      "std": 2.5982,
+      "min": -9.5712,
+      "max": 11.7628,
+      "pct_within_3std": 99.69,
+      "status": "PASS",
+      "issues": []
+    },
+    "ohlc_norm_high": {
+      "count": 58517,
+      "nan_count": "0",
+      "inf_count": 0,
+      "mean": 0.818,
+      "std": 2.6477,
+      "min": -8.8961,
+      "max": 15.4299,
+      "pct_within_3std": 99.55,
+      "status": "PASS",
+      "issues": []
+    },
+    "ohlc_norm_low": {
+      "count": 58517,
+      "nan_count": "0",
+      "inf_count": 0,
+      "mean": -0.1735,
+      "std": 2.6523,
+      "min": -11.3775,
+      "max": 10.311,
+      "pct_within_3std": 99.69,
+      "status": "PASS",
+      "issues": []
+    },
+    "ohlc_norm_close": {
+      "count": 58517,
+      "nan_count": "0",
+      "inf_count": 0,
+      "mean": 0.3352,
+      "std": 2.6849,
+      "min": -9.8985,
+      "max": 14.1023,
+      "pct_within_3std": 99.68,
+      "status": "PASS",
+      "issues": []
+    },
+    "volume_zscore": {
+      "count": 58517,
+      "nan_count": "0",
+      "inf_count": 0,
+      "mean": 0.0102,
+      "std": 1.0441,
+      "min": -5.0,
+      "max": 5.0,
+      "pct_within_3std": 98.79,
+      "status": "PASS",
+      "issues": []
+    },
+    "smi": {
+      "count": 58517,
+      "mean": 0.0583,
+      "std": 0.5012,
+      "min": -0.9678,
+      "max": 0.9745,
+      "inf_count": 0,
+      "status": "PASS",
+      "issues": []
+    },
+    "ma_ribbon_slope": {
+      "count": 58517,
+      "mean": 0.0112,
+      "std": 0.197,
+      "min": -1.4083,
+      "max": 1.4644,
+      "inf_count": 0,
+      "status": "PASS",
+      "issues": []
+    },
+    "liquidity_distance": {
+      "count": 58517,
+      "mean": 0.0307,
+      "std": 0.7754,
+      "min": -5.0,
+      "max": 5.0,
+      "inf_count": 0,
+      "status": "PASS",
+      "issues": []
+    },
+    "fvg_status": {
+      "count": 58517,
+      "mean": 0.0046,
+      "std": 0.5481,
+      "min": -1.0,
+      "max": 1.0,
+      "inf_count": 0,
+      "status": "PASS",
+      "issues": []
+    }
+  }
+}

@@ -116,6 +116,10 @@ REPORTS_DIR = PROJECT_ROOT / "reports"
 
 RAW_CSV_FILENAME = "xauusd_m30_raw.csv"
 CLEAN_PARQUET_FILENAME = "xauusd_m30_clean.parquet"
+FEATURES_PARQUET_FILENAME = "xauusd_m30_features.parquet"
+TRAIN_PARQUET_FILENAME = "xauusd_m30_train.parquet"
+TEST_PARQUET_FILENAME = "xauusd_m30_test.parquet"
+FEATURE_REPORT_FILENAME = "feature_quality_report.json"
 
 # Parquet compression
 PARQUET_COMPRESSION = "snappy"
