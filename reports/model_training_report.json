@@ -1,0 +1,109 @@
+{
+  "timestamp_utc": "2026-09-22T19:59:02.287732+00:00",
+  "model_architecture": {
+    "total_parameters": 3214853,
+    "trainable_parameters": 59909,
+    "frozen_parameters": 3154944,
+    "trainable_percentage": 1.864,
+    "use_lora": true,
+    "lora_rank": 8,
+    "d_model": 256,
+    "num_layers": 4,
+    "num_classes": 5
+  },
+  "hyperparameters": {
+    "epochs": 2,
+    "batch_size": 256,
+    "learning_rate": 0.0002,
+    "gamma": 2.0,
+    "alpha_weights": [
+      0.4323,
+      1.0979,
+      1.1903,
+      1.1038,
+      1.1757
+    ],
+    "device": "cpu"
+  },
+  "training_history": {
+    "epoch": [
+      1,
+      2
+    ],
+    "train_loss": [
+      0.9228,
+      0.8952
+    ],
+    "train_acc": [
+      0.2183,
+      0.2358
+    ],
+    "val_loss": [
+      0.9128,
+      0.9097
+    ],
+    "val_acc": [
+      0.2383,
+      0.2344
+    ],
+    "val_f1": [
+      0.1978,
+      0.2074
+    ]
+  },
+  "sealed_holdout_metrics": {
+    "accuracy": 0.2344,
+    "macro_precision": 0.2188,
+    "macro_recall": 0.2262,
+    "macro_f1": 0.2074,
+    "per_class": {
+      "0": {
+        "total_samples": 4271,
+        "true_positive": 1207,
+        "false_positive": 1781,
+        "false_negative": 3064,
+        "precision": 0.4039,
+        "recall": 0.2826,
+        "f1": 0.3326
+      },
+      "1": {
+        "total_samples": 1875,
+        "true_positive": 117,
+        "false_positive": 629,
+        "false_negative": 1758,
+        "precision": 0.1568,
+        "recall": 0.0624,
+        "f1": 0.0893
+      },
+      "2": {
+        "total_samples": 1489,
+        "true_positive": 471,
+        "false_positive": 2554,
+        "false_negative": 1018,
+        "precision": 0.1557,
+        "recall": 0.3163,
+        "f1": 0.2087
+      },
+      "3": {
+        "total_samples": 2032,
+        "true_positive": 300,
+        "false_positive": 1355,
+        "false_negative": 1732,
+        "precision": 0.1813,
+        "recall": 0.1476,
+        "f1": 0.1627
+      },
+      "4": {
+        "total_samples": 1951,
+        "true_positive": 628,
+        "false_positive": 2576,
+        "false_negative": 1323,
+        "precision": 0.196,
+        "recall": 0.3219,
+        "f1": 0.2436
+      }
+    },
+    "loss": 0.9097
+  },
+  "checkpoint_file": "C:\\Ngoding\\xau_deep_sniper\\checkpoints\\best_moment_lora.pt"
+}
