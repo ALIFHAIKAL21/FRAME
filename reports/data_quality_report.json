@@ -1,0 +1,76 @@
+{
+  "overview": {
+    "total_bars": 58772,
+    "date_range_start": "2021-09-23 12:30:00+00:00",
+    "date_range_end": "2026-09-22 12:00:00+00:00",
+    "total_trading_days": 1290,
+    "duration_days": 1824,
+    "duration_years": 4.99
+  },
+  "flag_distribution": {
+    "is_weekend": {
+      "count": 0,
+      "pct": 0.0
+    },
+    "is_rollover_quarantine": {
+      "count": 2508,
+      "pct": 4.267
+    },
+    "is_flat_candle": {
+      "count": 0,
+      "pct": 0.0
+    },
+    "is_bad_tick": {
+      "count": 4,
+      "pct": 0.007
+    },
+    "is_news_blackout": {
+      "count": 0,
+      "pct": 0.0
+    },
+    "entry_eligible": {
+      "count": 56260,
+      "pct": 95.726
+    }
+  },
+  "bars_per_day": {
+    "mean": 45.56,
+    "median": 46.0,
+    "min": 23,
+    "max": 46,
+    "std": 1.58,
+    "days_below_40_bars": 9,
+    "days_with_48_bars": 0
+  },
+  "price_stats": {
+    "price_range": {
+      "min_low": 1614.81,
+      "max_high": 5598.03
+    },
+    "bar_range_stats": {
+      "mean": 6.2559,
+      "median": 3.75,
+      "max": 398.72,
+      "min": 0.0
+    },
+    "volume_stats": {
+      "mean": 3951.36,
+      "median": 2355.0,
+      "zero_volume_bars": 0,
+      "zero_volume_pct": 0.0
+    }
+  },
+  "spread_stats": {
+    "has_real_spread": true,
+    "mean": 0.75,
+    "median": 0.5,
+    "max": 28.1,
+    "min": 0.0
+  },
+  "entry_eligibility": {
+    "eligible_bars": 56260,
+    "total_bars": 58772,
+    "eligible_pct": 95.73,
+    "blocked_bars": 2512
+  }
+}
