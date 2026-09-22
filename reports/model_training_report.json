@@ -1,5 +1,5 @@
 {
-  "timestamp_utc": "2026-09-22T19:59:02.287732+00:00",
+  "timestamp_utc": "2026-09-22T20:05:08.478898+00:00",
   "model_architecture": {
     "total_parameters": 3214853,
     "trainable_parameters": 59909,
@@ -12,8 +12,8 @@
     "num_classes": 5
   },
   "hyperparameters": {
-    "epochs": 2,
-    "batch_size": 256,
+    "epochs": 5,
+    "batch_size": 128,
     "learning_rate": 0.0002,
     "gamma": 2.0,
     "alpha_weights": [
@@ -23,87 +23,105 @@
       1.1038,
       1.1757
     ],
-    "device": "cpu"
+    "device": "cuda"
   },
   "training_history": {
     "epoch": [
       1,
-      2
+      2,
+      3,
+      4,
+      5
     ],
     "train_loss": [
-      0.9228,
-      0.8952
+      0.9167,
+      0.8886,
+      0.8781,
+      0.8718,
+      0.8672
     ],
     "train_acc": [
-      0.2183,
-      0.2358
+      0.2258,
+      0.2404,
+      0.2472,
+      0.2535,
+      0.2602
     ],
     "val_loss": [
-      0.9128,
-      0.9097
+      0.9115,
+      0.9062,
+      0.9094,
+      0.9026,
+      0.9017
     ],
     "val_acc": [
-      0.2383,
-      0.2344
+      0.2323,
+      0.2484,
+      0.2329,
+      0.2522,
+      0.2407
     ],
     "val_f1": [
-      0.1978,
-      0.2074
+      0.1918,
+      0.2057,
+      0.2049,
+      0.2093,
+      0.2094
     ]
   },
   "sealed_holdout_metrics": {
-    "accuracy": 0.2344,
-    "macro_precision": 0.2188,
-    "macro_recall": 0.2262,
-    "macro_f1": 0.2074,
+    "accuracy": 0.2407,
+    "macro_precision": 0.2171,
+    "macro_recall": 0.2277,
+    "macro_f1": 0.2094,
     "per_class": {
       "0": {
         "total_samples": 4271,
-        "true_positive": 1207,
-        "false_positive": 1781,
-        "false_negative": 3064,
-        "precision": 0.4039,
-        "recall": 0.2826,
-        "f1": 0.3326
+        "true_positive": 1296,
+        "false_positive": 1961,
+        "false_negative": 2975,
+        "precision": 0.3979,
+        "recall": 0.3034,
+        "f1": 0.3443
       },
       "1": {
         "total_samples": 1875,
-        "true_positive": 117,
-        "false_positive": 629,
-        "false_negative": 1758,
-        "precision": 0.1568,
-        "recall": 0.0624,
-        "f1": 0.0893
+        "true_positive": 123,
+        "false_positive": 687,
+        "false_negative": 1752,
+        "precision": 0.1519,
+        "recall": 0.0656,
+        "f1": 0.0916
       },
       "2": {
         "total_samples": 1489,
-        "true_positive": 471,
-        "false_positive": 2554,
-        "false_negative": 1018,
-        "precision": 0.1557,
-        "recall": 0.3163,
-        "f1": 0.2087
+        "true_positive": 433,
+        "false_positive": 2266,
+        "false_negative": 1056,
+        "precision": 0.1604,
+        "recall": 0.2908,
+        "f1": 0.2068
       },
       "3": {
         "total_samples": 2032,
-        "true_positive": 300,
-        "false_positive": 1355,
-        "false_negative": 1732,
-        "precision": 0.1813,
-        "recall": 0.1476,
-        "f1": 0.1627
+        "true_positive": 255,
+        "false_positive": 1250,
+        "false_negative": 1777,
+        "precision": 0.1694,
+        "recall": 0.1255,
+        "f1": 0.1442
       },
       "4": {
         "total_samples": 1951,
-        "true_positive": 628,
-        "false_positive": 2576,
-        "false_negative": 1323,
-        "precision": 0.196,
-        "recall": 0.3219,
-        "f1": 0.2436
+        "true_positive": 689,
+        "false_positive": 2658,
+        "false_negative": 1262,
+        "precision": 0.2059,
+        "recall": 0.3532,
+        "f1": 0.2601
       }
     },
-    "loss": 0.9097
+    "loss": 0.9017
   },
   "checkpoint_file": "C:\\Ngoding\\xau_deep_sniper\\checkpoints\\best_moment_lora.pt"
 }
