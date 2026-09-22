@@ -1,0 +1,102 @@
+{
+  "timestamp_generated_utc": "2026-09-22T19:47:06.144014+00:00",
+  "total_bars": 58645,
+  "evaluated_bars": 58629,
+  "news_blackout": {
+    "blackout_bars": 672,
+    "blackout_pct": 1.15,
+    "macro_events_count": 240
+  },
+  "overall_class_distribution": {
+    "class_counts": {
+      "0": 22951,
+      "1": 9229,
+      "2": 8267,
+      "3": 9360,
+      "4": 8822
+    },
+    "class_percentages": {
+      "0": 39.146,
+      "1": 15.741,
+      "2": 14.101,
+      "3": 15.965,
+      "4": 15.047
+    },
+    "alpha_weights": [
+      0.4418,
+      1.0988,
+      1.2266,
+      1.0834,
+      1.1494
+    ],
+    "gamma": 2.0,
+    "total_samples": 58629
+  },
+  "train_set": {
+    "bars": 46900,
+    "start": "2021-09-28 10:00:00+00:00",
+    "end": "2025-09-16 14:30:00+00:00",
+    "class_distribution": {
+      "class_counts": {
+        "0": 18639,
+        "1": 7339,
+        "2": 6769,
+        "3": 7300,
+        "4": 6853
+      },
+      "class_percentages": {
+        "0": 39.742,
+        "1": 15.648,
+        "2": 14.433,
+        "3": 15.565,
+        "4": 14.612
+      },
+      "alpha_weights": [
+        0.4323,
+        1.0979,
+        1.1903,
+        1.1038,
+        1.1757
+      ],
+      "gamma": 2.0,
+      "total_samples": 46900
+    }
+  },
+  "test_set": {
+    "bars": 11681,
+    "start": "2025-09-18 01:00:00+00:00",
+    "end": "2026-09-22 12:00:00+00:00",
+    "class_distribution": {
+      "class_counts": {
+        "0": 4294,
+        "1": 1885,
+        "2": 1493,
+        "3": 2045,
+        "4": 1964
+      },
+      "class_percentages": {
+        "0": 36.761,
+        "1": 16.137,
+        "2": 12.781,
+        "3": 17.507,
+        "4": 16.814
+      },
+      "alpha_weights": [
+        0.4789,
+        1.091,
+        1.3774,
+        1.0056,
+        1.0471
+      ],
+      "gamma": 2.0,
+      "total_samples": 11681
+    }
+  },
+  "parameters": {
+    "time_barrier_bars": 16,
+    "commission_per_oz": 0.035,
+    "default_spread_pips": 0.75,
+    "purge_bars": 16,
+    "embargo_bars": 48
+  }
+}

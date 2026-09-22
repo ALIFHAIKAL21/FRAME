@@ -120,6 +120,10 @@ FEATURES_PARQUET_FILENAME = "xauusd_m30_features.parquet"
 TRAIN_PARQUET_FILENAME = "xauusd_m30_train.parquet"
 TEST_PARQUET_FILENAME = "xauusd_m30_test.parquet"
 FEATURE_REPORT_FILENAME = "feature_quality_report.json"
+LABELED_PARQUET_FILENAME = "xauusd_m30_labeled.parquet"
+TRAIN_LABELED_PARQUET_FILENAME = "xauusd_m30_train_labeled.parquet"
+TEST_LABELED_PARQUET_FILENAME = "xauusd_m30_test_labeled.parquet"
+LABELING_REPORT_FILENAME = "labeling_quality_report.json"
 
 # Parquet compression
 PARQUET_COMPRESSION = "snappy"
