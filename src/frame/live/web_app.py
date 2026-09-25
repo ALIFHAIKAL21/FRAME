@@ -186,6 +186,46 @@ if "cron_ping" in params or "ping" in params or cron_key:
         st.stop()
 
 # -------------------------------------------------------------
+# Desktop Workstation IPC / HTTPS Sync API
+# -------------------------------------------------------------
+api_mode = params.get("api")
+if api_mode:
+    token = params.get("key") or params.get("cron_key") or ""
+    if auth_manager.verify_cron_key(str(token)) or auth_manager.verify_session_token(str(token)):
+        if api_mode == "state":
+            st.json({
+                "status": "online",
+                "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+                "broker": {
+                    "cash": broker.cash,
+                    "initial_capital": broker.initial_capital,
+                    "lot_mode": broker.lot_mode,
+                    "max_lot": broker.max_lot,
+                    "stats": broker.get_stats(),
+                    "open_position": broker.open_position
+                },
+                "recent_trades": db.get_closed_trades_df(limit=30).to_dict(orient="records")
+            })
+            st.stop()
+        elif api_mode == "panic_close":
+            if broker.open_position is not None:
+                ep = broker.open_position["entry_price"]
+                trade = broker.close_order(ep, exit_reason="Desktop Remote IPC Panic Close")
+                db.record_order_closed(trade)
+                st.json({"success": True, "message": "Position closed on cloud server", "trade": trade})
+            else:
+                st.json({"success": False, "message": "No open position on cloud server"})
+            st.stop()
+        elif api_mode == "reset":
+            cap = float(params.get("capital", 500.0))
+            broker.reset(cap)
+            st.json({"success": True, "message": f"Cloud broker reset to ${cap}"})
+            st.stop()
+    else:
+        st.json({"error": "Unauthorized desktop IPC request. Invalid key."})
+        st.stop()
+
+# -------------------------------------------------------------
 # Institutional Security Clearance Gatekeeper
 # -------------------------------------------------------------
 auth_user = st.session_state.get("auth_user")

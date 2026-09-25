@@ -36,6 +36,41 @@ from .widgets.live_metrics import LiveMetricsPanel
 from .widgets.trade_log import LiveTradeJournalWidget
 from .db_audit import TradeAuditDB
 
+# -------------------------------------------------------------
+# Cloud Server 24/7 Client Synchronizer
+# -------------------------------------------------------------
+import urllib.request, urllib.parse
+
+class CloudServerClient:
+    def __init__(self, base_url: str, secret_key: str = "cron_secret_flowdev_falcon_2026"):
+        self.base_url = base_url.rstrip("/") if base_url else ""
+        self.secret_key = secret_key
+
+    def fetch_state(self) -> Optional[dict]:
+        if not self.base_url:
+            return None
+        url = f"{self.base_url}/?api=state&key={urllib.parse.quote(self.secret_key)}"
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "FlowdevDesktopCockpit/1.0"})
+            with urllib.request.urlopen(req, timeout=3.0) as resp:
+                if resp.status == 200:
+                    return json.loads(resp.read().decode("utf-8"))
+        except Exception:
+            pass
+        return None
+
+    def panic_close(self) -> bool:
+        if not self.base_url:
+            return False
+        url = f"{self.base_url}/?api=panic_close&key={urllib.parse.quote(self.secret_key)}"
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "FlowdevDesktopCockpit/1.0"})
+            with urllib.request.urlopen(req, timeout=4.0) as resp:
+                return resp.status == 200
+        except Exception:
+            return False
+
+
 class LiveTradingWindow(QMainWindow):
     def __init__(self, operator_user: Optional[Dict[str, Any]] = None):
         super().__init__()
@@ -57,6 +92,13 @@ class LiveTradingWindow(QMainWindow):
         # State
         self.last_tick: dict = {}
         self.recent_candles: list = []
+        
+        # Cloud Server 24/7 Client State
+        self.cloud_client = None
+        self.cloud_url_file = pathlib.Path(r"logs/cloud_server_url.txt")
+        self.cloud_sync_timer = QTimer(self)
+        self.cloud_sync_timer.setInterval(2500)
+        self.cloud_sync_timer.timeout.connect(self._sync_with_cloud_server)
 
         # Windows Background Keep-Alive & System Tray
         self._enable_windows_keepalive()
@@ -136,6 +178,10 @@ class LiveTradingWindow(QMainWindow):
         h_layout.addWidget(self.lbl_feed_status)
         h_layout.addSpacing(12)
         h_layout.addWidget(self.lbl_agent_status)
+        h_layout.addSpacing(12)
+        self.lbl_cloud_status = QLabel("[CLOUD: STANDBY 🟡]")
+        self.lbl_cloud_status.setStyleSheet("font-size: 10.5px; font-family: monospace; color: #ffd700; font-weight: 700; background-color: #0f172a; padding: 4px 8px; border: 1px solid #1e293b; border-radius: 3px;")
+        h_layout.addWidget(self.lbl_cloud_status)
         h_layout.addStretch()
         h_layout.addWidget(lbl_hw)
         h_layout.addSpacing(12)
@@ -165,6 +211,34 @@ class LiveTradingWindow(QMainWindow):
         lbl_ctrl = QLabel("LIVE TRADING ENGINE")
         lbl_ctrl.setStyleSheet("font-size: 10px; font-weight: 700; color: #8b949e; letter-spacing: 1px;")
         left_layout.addWidget(lbl_ctrl)
+
+        # -------------------------------------------------------------
+        # Cloud 24/7 Server Link Box
+        # -------------------------------------------------------------
+        cloud_box = QFrame()
+        cloud_box.setStyleSheet("background-color: #080c14; border: 1px solid #1e293b; border-radius: 4px; padding: 6px;")
+        c_layout = QVBoxLayout(cloud_box)
+        c_layout.setContentsMargins(6, 6, 6, 6)
+        c_layout.setSpacing(4)
+
+        lbl_c_title = QLabel("☁️ 24/7 CLOUD SERVER LINK")
+        lbl_c_title.setStyleSheet("font-size: 9.5px; font-weight: 800; color: #38bdf8; letter-spacing: 0.8px;")
+        c_layout.addWidget(lbl_c_title)
+
+        self.txt_cloud_url = QLineEdit()
+        self.txt_cloud_url.setPlaceholderText("https://[app].streamlit.app")
+        self.txt_cloud_url.setStyleSheet("font-size: 10px; font-family: monospace; padding: 3px 6px;")
+        c_layout.addWidget(self.txt_cloud_url)
+
+        self.btn_link_cloud = QPushButton("🔗 CONNECT CLOUD ENGINE")
+        self.btn_link_cloud.setStyleSheet("""
+            QPushButton { background-color: #1e1b4b; border: 1px solid #4338ca; font-size: 10px; font-weight: 700; color: #a5b4fc; padding: 4px; }
+            QPushButton:hover { background-color: #312e81; color: #ffffff; }
+        """)
+        self.btn_link_cloud.clicked.connect(self._connect_cloud_engine)
+        c_layout.addWidget(self.btn_link_cloud)
+
+        left_layout.addWidget(cloud_box)
 
         # Arm/Disarm Master Switch
         self.btn_toggle_agent = QPushButton("⚡ ARMED (ACTIVELY TRADING)")
@@ -432,11 +506,71 @@ class LiveTradingWindow(QMainWindow):
                 3500
             )
 
+    def _connect_cloud_engine(self):
+        url = self.txt_cloud_url.text().strip()
+        if not url:
+            QMessageBox.warning(self, "Cloud URL Kosong", "Silakan masukkan URL Streamlit Cloud Anda.\nContoh: https://your-app.streamlit.app")
+            return
+        
+        self.cloud_client = CloudServerClient(url)
+        # Save URL for persistence
+        try:
+            self.cloud_url_file.parent.mkdir(parents=True, exist_ok=True)
+            self.cloud_url_file.write_text(url, encoding="utf-8")
+        except Exception:
+            pass
+
+        self._sync_with_cloud_server()
+        if not self.cloud_sync_timer.isActive():
+            self.cloud_sync_timer.start()
+
+    def _sync_with_cloud_server(self):
+        if not self.cloud_client:
+            # Check if saved file exists
+            if self.cloud_url_file.exists():
+                try:
+                    saved_url = self.cloud_url_file.read_text(encoding="utf-8").strip()
+                    if saved_url:
+                        self.txt_cloud_url.setText(saved_url)
+                        self.cloud_client = CloudServerClient(saved_url)
+                except Exception:
+                    pass
+            if not self.cloud_client:
+                return
+
+        state = self.cloud_client.fetch_state()
+        if state and state.get("status") == "online":
+            self.lbl_cloud_status.setText("[CLOUD: ONLINE 🟢]")
+            self.lbl_cloud_status.setStyleSheet("font-size: 10.5px; font-family: monospace; color: #00e676; font-weight: 700; background-color: #0f172a; padding: 4px 8px; border: 1px solid #1e293b; border-radius: 3px;")
+            
+            # Update metrics and HUD from cloud
+            b_info = state.get("broker", {})
+            if "stats" in b_info:
+                self.metrics_panel.update_metrics(b_info["stats"])
+            
+            # Update active position
+            pos = b_info.get("open_position")
+            if pos:
+                self.position_hud.update_position(pos)
+            else:
+                self.position_hud.set_standby(True)
+        else:
+            self.lbl_cloud_status.setText("[CLOUD: OFFLINE 🔴]")
+            self.lbl_cloud_status.setStyleSheet("font-size: 10.5px; font-family: monospace; color: #ff5252; font-weight: 700; background-color: #0f172a; padding: 4px 8px; border: 1px solid #1e293b; border-radius: 3px;")
+
     def _on_panic_close_requested(self):
+        if self.cloud_client and self.cloud_sync_timer.isActive():
+            ok = self.cloud_client.panic_close()
+            if ok:
+                QMessageBox.information(self, "Cloud Panic Close", "Perintah Panic Close berhasil dikirim ke Cloud Server!")
+                self._sync_with_cloud_server()
+                return
+
         if self.broker.open_position is None:
             return
         p = self.last_tick.get("bid" if self.broker.open_position["direction"] == "BUY" else "ask", 0.0)
         self.agent.manual_close(p)
+
 
     def _toggle_agent_armed(self):
         new_state = not self.agent.is_armed
