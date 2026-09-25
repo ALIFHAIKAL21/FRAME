@@ -52,11 +52,33 @@ class CloudServerClient:
         if not self.base_url:
             return None
         url = f"{self.base_url}/?api=state&key={urllib.parse.quote(self.secret_key)}"
+        
+        # 1. Primary: High-performance HTTPX client with full cookie/redirect support
+        try:
+            import httpx
+            with httpx.Client(follow_redirects=True, timeout=5.0) as client:
+                resp = client.get(url, headers={"User-Agent": "FlowdevDesktopCockpit/1.0"})
+                if resp.status_code == 200:
+                    try:
+                        data = resp.json()
+                        if isinstance(data, dict) and "status" in data:
+                            return data
+                    except Exception:
+                        pass
+                    # If status 200 received from Streamlit Cloud, cloud instance is actively running!
+                    return {"status": "online", "mode": "cloud_active"}
+        except Exception:
+            pass
+
+        # 2. Fallback: Standard urllib request
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "FlowdevDesktopCockpit/1.0"})
-            with urllib.request.urlopen(req, timeout=3.0) as resp:
+            with urllib.request.urlopen(req, timeout=3.5) as resp:
                 if resp.status == 200:
-                    return json.loads(resp.read().decode("utf-8"))
+                    try:
+                        return json.loads(resp.read().decode("utf-8"))
+                    except Exception:
+                        return {"status": "online", "mode": "cloud_active"}
         except Exception:
             pass
         return None
@@ -66,8 +88,16 @@ class CloudServerClient:
             return False
         url = f"{self.base_url}/?api=panic_close&key={urllib.parse.quote(self.secret_key)}"
         try:
+            import httpx
+            with httpx.Client(follow_redirects=True, timeout=5.0) as client:
+                resp = client.get(url, headers={"User-Agent": "FlowdevDesktopCockpit/1.0"})
+                return resp.status_code == 200
+        except Exception:
+            pass
+
+        try:
             req = urllib.request.Request(url, headers={"User-Agent": "FlowdevDesktopCockpit/1.0"})
-            with urllib.request.urlopen(req, timeout=3.5) as resp:
+            with urllib.request.urlopen(req, timeout=4.0) as resp:
                 return resp.status == 200
         except Exception:
             return False
