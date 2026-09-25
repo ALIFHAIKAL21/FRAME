@@ -15,7 +15,7 @@ try:
         QLabel, QPushButton, QComboBox, QSplitter, QFrame, QDoubleSpinBox, 
         QMessageBox, QSystemTrayIcon, QMenu, QDialog, QLineEdit
     )
-    from PySide6.QtCore import Qt, QTimer, QLocale
+    from PySide6.QtCore import Qt, QTimer, QLocale, Signal, QObject
     from PySide6.QtGui import QFont, QColor, QAction, QIcon, QPixmap, QPainter, QBrush, QPen
 except ImportError:
     from PyQt6.QtWidgets import (
@@ -23,7 +23,7 @@ except ImportError:
         QLabel, QPushButton, QComboBox, QSplitter, QFrame, QDoubleSpinBox, 
         QMessageBox, QSystemTrayIcon, QMenu, QDialog, QLineEdit
     )
-    from PyQt6.QtCore import Qt, QTimer, QLocale
+    from PyQt6.QtCore import Qt, QTimer, QLocale, pyqtSignal as Signal, QObject
     from PyQt6.QtGui import QFont, QColor, QAction, QIcon, QPixmap, QPainter, QBrush, QPen
 
 from src.frame.gui.styles import QSS_STYLE
@@ -39,9 +39,9 @@ from .db_audit import TradeAuditDB
 DEFAULT_CLOUD_SERVER_URL = "https://flowdevframe.streamlit.app"
 
 # -------------------------------------------------------------
-# Cloud Server 24/7 Client Synchronizer (Zero-UI Secure Channel)
+# Cloud Server 24/7 Client Synchronizer (Zero-UI Non-Blocking Async Channel)
 # -------------------------------------------------------------
-import urllib.request, urllib.parse
+import urllib.request, urllib.parse, threading
 
 class CloudServerClient:
     def __init__(self, base_url: str = DEFAULT_CLOUD_SERVER_URL, secret_key: str = "cron_secret_flowdev_falcon_2026"):
@@ -54,7 +54,7 @@ class CloudServerClient:
         url = f"{self.base_url}/?api=state&key={urllib.parse.quote(self.secret_key)}"
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "FlowdevDesktopCockpit/1.0"})
-            with urllib.request.urlopen(req, timeout=2.5) as resp:
+            with urllib.request.urlopen(req, timeout=3.0) as resp:
                 if resp.status == 200:
                     return json.loads(resp.read().decode("utf-8"))
         except Exception:
@@ -71,13 +71,37 @@ class CloudServerClient:
                 return resp.status == 200
         except Exception:
             return False
-        url = f"{self.base_url}/?api=panic_close&key={urllib.parse.quote(self.secret_key)}"
-        try:
-            req = urllib.request.Request(url, headers={"User-Agent": "FlowdevDesktopCockpit/1.0"})
-            with urllib.request.urlopen(req, timeout=4.0) as resp:
-                return resp.status == 200
-        except Exception:
-            return False
+
+class CloudSyncWorker(QObject):
+    state_ready = Signal(dict)
+    sync_failed = Signal()
+
+    def __init__(self, client: CloudServerClient, parent=None):
+        super().__init__(parent)
+        self.client = client
+        self._lock = threading.Lock()
+        self._in_progress = False
+
+    def request_sync(self):
+        with self._lock:
+            if self._in_progress:
+                return
+            self._in_progress = True
+
+        def _worker():
+            try:
+                state = self.client.fetch_state()
+                if state and state.get("status") == "online":
+                    self.state_ready.emit(state)
+                else:
+                    self.sync_failed.emit()
+            except Exception:
+                self.sync_failed.emit()
+            finally:
+                with self._lock:
+                    self._in_progress = False
+
+        threading.Thread(target=_worker, daemon=True).start()
 
 
 class LiveTradingWindow(QMainWindow):
@@ -102,12 +126,17 @@ class LiveTradingWindow(QMainWindow):
         self.last_tick: dict = {}
         self.recent_candles: list = []
         
-        # Cloud Server 24/7 Client State (Zero-UI, Default: https://flowdevframe.streamlit.app)
+        # Cloud Server 24/7 Client State (Zero-UI Non-Blocking Async Channel)
         self.cloud_client = CloudServerClient(DEFAULT_CLOUD_SERVER_URL)
+        self.cloud_worker = CloudSyncWorker(self.cloud_client, parent=self)
+        self.cloud_worker.state_ready.connect(self._on_cloud_state_ready)
+        self.cloud_worker.sync_failed.connect(self._on_cloud_sync_failed)
+
         self.cloud_sync_timer = QTimer(self)
-        self.cloud_sync_timer.setInterval(2500)
-        self.cloud_sync_timer.timeout.connect(self._sync_with_cloud_server)
+        self.cloud_sync_timer.setInterval(3000)
+        self.cloud_sync_timer.timeout.connect(self.cloud_worker.request_sync)
         self.cloud_sync_timer.start()
+        self.cloud_worker.request_sync()
 
         # Standalone Desktop Cockpit
         self._init_ui()
@@ -375,7 +404,6 @@ class LiveTradingWindow(QMainWindow):
 
     def _on_feed_tick(self, tick: dict):
         self.last_tick = tick
-        self.chart_widget.on_tick(tick)
         self.agent.on_tick(tick)
 
         # Update telemetry strip
@@ -392,7 +420,11 @@ class LiveTradingWindow(QMainWindow):
         self.metrics_panel.update_metrics(stats, current_session=cur_sess or "Off-Session")
 
     def _on_feed_candle(self, candle: dict):
-        self.chart_widget.on_candle_updated(candle)
+        if self.last_tick:
+            self.chart_widget.update_tick_and_candle(self.last_tick, candle)
+        else:
+            self.chart_widget.on_candle_updated(candle)
+
         if len(self.recent_candles) == 0 or self.recent_candles[-1]["time"] != candle["time"]:
             self.recent_candles.append(candle)
         else:
@@ -486,35 +518,37 @@ class LiveTradingWindow(QMainWindow):
                 3500
             )
 
-    def _sync_with_cloud_server(self):
-        if not self.cloud_client:
-            return
-
-        state = self.cloud_client.fetch_state()
-        if state and state.get("status") == "online":
-            self.lbl_cloud_status.setText("[CLOUD: ONLINE 🟢]")
-            self.lbl_cloud_status.setStyleSheet("font-size: 10.5px; font-family: monospace; color: #00e676; font-weight: 700; background-color: #0f172a; padding: 4px 8px; border: 1px solid #1e293b; border-radius: 3px;")
-            
-            b_info = state.get("broker", {})
-            if "stats" in b_info:
-                self.metrics_panel.update_metrics(b_info["stats"])
-            
-            pos = b_info.get("open_position")
-            if pos:
-                self.position_hud.update_position(pos)
-            else:
-                self.position_hud.set_standby(True)
+    def _on_cloud_state_ready(self, state: dict):
+        self.lbl_cloud_status.setText("[CLOUD: ONLINE 🟢]")
+        self.lbl_cloud_status.setStyleSheet("font-size: 10.5px; font-family: monospace; color: #00e676; font-weight: 700; background-color: #0f172a; padding: 4px 8px; border: 1px solid #1e293b; border-radius: 3px;")
+        
+        b_info = state.get("broker", {})
+        if "stats" in b_info:
+            self.metrics_panel.update_metrics(b_info["stats"])
+        
+        pos = b_info.get("open_position")
+        if pos:
+            self.position_hud.update_position(pos)
         else:
-            self.lbl_cloud_status.setText("[DESKTOP LOCAL 🟡]")
-            self.lbl_cloud_status.setStyleSheet("font-size: 10.5px; font-family: monospace; color: #ffd700; font-weight: 700; background-color: #0f172a; padding: 4px 8px; border: 1px solid #1e293b; border-radius: 3px;")
+            self.position_hud.set_standby(True)
+
+    def _on_cloud_sync_failed(self):
+        self.lbl_cloud_status.setText("[DESKTOP LOCAL 🟡]")
+        self.lbl_cloud_status.setStyleSheet("font-size: 10.5px; font-family: monospace; color: #ffd700; font-weight: 700; background-color: #0f172a; padding: 4px 8px; border: 1px solid #1e293b; border-radius: 3px;")
+
+    def _sync_with_cloud_server(self):
+        """Non-blocking background sync request."""
+        if hasattr(self, "cloud_worker"):
+            self.cloud_worker.request_sync()
 
     def _on_panic_close_requested(self):
-        if self.cloud_client and self.cloud_sync_timer.isActive():
-            ok = self.cloud_client.panic_close()
-            if ok:
-                QMessageBox.information(self, "Cloud Panic Close", "Perintah Panic Close berhasil dikirim ke Cloud Server!")
-                self._sync_with_cloud_server()
-                return
+        if self.cloud_client:
+            def _async_panic():
+                try:
+                    self.cloud_client.panic_close()
+                except Exception:
+                    pass
+            threading.Thread(target=_async_panic, daemon=True).start()
 
         if self.broker.open_position is None:
             return

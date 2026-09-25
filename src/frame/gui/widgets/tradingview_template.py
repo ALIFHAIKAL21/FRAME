@@ -12,10 +12,15 @@ _JS_CACHED = None
 def _get_js_bundle() -> str:
     global _JS_CACHED
     if _JS_CACHED is None:
-        js_path = pathlib.Path(r"c:\Ngoding\xau_deep_sniper\src\frame\gui\assets\lightweight-charts.standalone.production.js")
-        if js_path.exists():
-            _JS_CACHED = js_path.read_text(encoding="utf-8")
-        else:
+        possible_paths = [
+            pathlib.Path(__file__).resolve().parent.parent / "assets" / "lightweight-charts.standalone.production.js",
+            pathlib.Path(r"c:\Ngoding\bot_trading\src\frame\gui\assets\lightweight-charts.standalone.production.js"),
+        ]
+        for js_path in possible_paths:
+            if js_path.exists():
+                _JS_CACHED = js_path.read_text(encoding="utf-8")
+                break
+        if _JS_CACHED is None:
             _JS_CACHED = ""
     return _JS_CACHED
 
@@ -244,31 +249,38 @@ def get_tradingview_html(
 
         // 7. Interactive Crosshair Hover
         chart.subscribeCrosshairMove(param => {{
-            if (!param.point || !param.time) {{
+            if (!param || !param.point || !param.time) {{
                 tooltip.style.display = 'none';
                 return;
             }}
-            const price = param.seriesPrices.get(candleSeries);
-            if (price) {{
-                const diff = price.close - price.open;
-                const diffPct = (diff / price.open) * 100;
-                const sign = diff >= 0 ? '+' : '';
-                const colorCls = diff >= 0 ? 'bull-text' : 'bear-text';
-
-                legendOhlc.innerHTML = `O: <span class="ohlc-val">$${{price.open.toFixed(2)}}</span> ` +
-                    `H: <span class="ohlc-val">$${{price.high.toFixed(2)}}</span> ` +
-                    `L: <span class="ohlc-val">$${{price.low.toFixed(2)}}</span> ` +
-                    `C: <span class="ohlc-val">$${{price.close.toFixed(2)}}</span> ` +
-                    `Chg: <span class="${{colorCls}}">${{sign}}$${{diff.toFixed(2)}} (${{sign}}${{diffPct.toFixed(2)}}%)</span>`;
-
-                tooltip.style.display = 'block';
-                tooltip.innerHTML = `
-                    <div style="color: #ffd700; font-weight: bold; margin-bottom: 3px;">XAU/USD M30</div>
-                    <div>O: $${{price.open.toFixed(2)}} | H: $${{price.high.toFixed(2)}}</div>
-                    <div>L: $${{price.low.toFixed(2)}} | C: $${{price.close.toFixed(2)}}</div>
-                    <div>Change: <span class="${{colorCls}}">${{sign}}$${{diff.toFixed(2)}} (${{sign}}${{diffPct.toFixed(2)}}%)</span></div>
-                `;
+            let price = null;
+            if (param.seriesData && typeof param.seriesData.get === 'function') {{
+                price = param.seriesData.get(candleSeries);
+            }} else if (param.seriesPrices && typeof param.seriesPrices.get === 'function') {{
+                price = param.seriesPrices.get(candleSeries);
             }}
+            if (!price || typeof price.close === 'undefined') {{
+                tooltip.style.display = 'none';
+                return;
+            }}
+            const diff = price.close - price.open;
+            const diffPct = price.open ? (diff / price.open) * 100 : 0;
+            const sign = diff >= 0 ? '+' : '';
+            const colorCls = diff >= 0 ? 'bull-text' : 'bear-text';
+
+            legendOhlc.innerHTML = `O: <span class="ohlc-val">$${{price.open.toFixed(2)}}</span> ` +
+                `H: <span class="ohlc-val">$${{price.high.toFixed(2)}}</span> ` +
+                `L: <span class="ohlc-val">$${{price.low.toFixed(2)}}</span> ` +
+                `C: <span class="ohlc-val">$${{price.close.toFixed(2)}}</span> ` +
+                `Chg: <span class="${{colorCls}}">${{sign}}$${{diff.toFixed(2)}} (${{sign}}${{diffPct.toFixed(2)}}%)</span>`;
+
+            tooltip.style.display = 'block';
+            tooltip.innerHTML = `
+                <div style="color: #ffd700; font-weight: bold; margin-bottom: 3px;">XAU/USD M30</div>
+                <div>O: $${{price.open.toFixed(2)}} | H: $${{price.high.toFixed(2)}}</div>
+                <div>L: $${{price.low.toFixed(2)}} | C: $${{price.close.toFixed(2)}}</div>
+                <div>Change: <span class="${{colorCls}}">${{sign}}$${{diff.toFixed(2)}} (${{sign}}${{diffPct.toFixed(2)}}%)</span></div>
+            `;
         }});
 
         window.addEventListener('resize', () => {{

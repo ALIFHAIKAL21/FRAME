@@ -1,52 +1,29 @@
-﻿# Byte-compiled / optimized / DLL files
+# Python & Environments
+.venv/
 __pycache__/
 *.py[cod]
 *$py.class
+.pytest_cache/
 
-# C extensions
-*.so
-
-# Distribution / packaging
-.Python
-env/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Virtual Environments
-.venv/
-venv/
-ENV/
-
-# Large Model Checkpoints & Data
-checkpoints/
-*.pt
-*.pth
-*.bin
-*.onnx
-
-# Data files (keep raw archives if small, ignore massive scratch)
-data/processed/*.parquet
-data/processed/*.h5
-
-# IDE & OS
-.vscode/
-.idea/
-.DS_Store
-Thumbs.db
-
+# Local data cache (large files)
+data/cache/
+data/paper_trading.db
+data/*.db
+data/bot_state.json
 *.db
 *.db-journal
 logs/
+*.log
+
+# Keep data directory structure
+!data/
+!data/.gitkeep
+!logs/
+!logs/.gitkeep
+
+# IDE & OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+scratch/
