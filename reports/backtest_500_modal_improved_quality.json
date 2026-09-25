@@ -1,0 +1,88 @@
+{
+  "engine": "MOMENT-15ch Professional Quality-Improved (Fixed 0.01 Lot Anchor)",
+  "model_checkpoint": "checkpoints/best_moment_15ch_lora.pt",
+  "period": "2026-01-01 to 2026-08-31",
+  "timeframe": "XAU/USD M30",
+  "initial_capital_usd": 500.0,
+  "final_capital_usd": 3347.71,
+  "net_pnl_usd": 2847.71,
+  "return_pct": 569.54,
+  "fixed_lot": 0.01,
+  "min_equity_watermark_usd": 351.41,
+  "total_trades": 706,
+  "trades_per_day": 4.13,
+  "days_with_4_5_trades": 132,
+  "pct_days_with_4_5_trades": 78.1,
+  "win_rate_pct": 58.92,
+  "wins_count": 416,
+  "losses_count": 290,
+  "profit_factor": 1.43,
+  "max_drawdown_pct": 51.75,
+  "expectancy_usd": 4.03,
+  "monthly_performance": [
+    {
+      "month": "2026-01",
+      "trades": 84,
+      "wins": 43,
+      "win_rate": 51.2,
+      "pnl": 95.06,
+      "balance": 595.06
+    },
+    {
+      "month": "2026-02",
+      "trades": 90,
+      "wins": 60,
+      "win_rate": 66.7,
+      "pnl": 743.25,
+      "balance": 1338.31
+    },
+    {
+      "month": "2026-03",
+      "trades": 91,
+      "wins": 59,
+      "win_rate": 64.8,
+      "pnl": 668.74,
+      "balance": 2007.05
+    },
+    {
+      "month": "2026-04",
+      "trades": 88,
+      "wins": 50,
+      "win_rate": 56.8,
+      "pnl": 196.46,
+      "balance": 2203.51
+    },
+    {
+      "month": "2026-05",
+      "trades": 81,
+      "wins": 44,
+      "win_rate": 54.3,
+      "pnl": -1.66,
+      "balance": 2201.85
+    },
+    {
+      "month": "2026-06",
+      "trades": 84,
+      "wins": 47,
+      "win_rate": 56.0,
+      "pnl": 283.95,
+      "balance": 2485.8
+    },
+    {
+      "month": "2026-07",
+      "trades": 96,
+      "wins": 61,
+      "win_rate": 63.5,
+      "pnl": 530.06,
+      "balance": 3015.86
+    },
+    {
+      "month": "2026-08",
+      "trades": 92,
+      "wins": 52,
+      "win_rate": 56.5,
+      "pnl": 331.85,
+      "balance": 3347.71
+    }
+  ]
+}

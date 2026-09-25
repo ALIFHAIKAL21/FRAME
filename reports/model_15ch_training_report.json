@@ -1,0 +1,89 @@
+{
+  "timestamp_utc": "2026-09-24T14:38:44.393326+00:00",
+  "model_architecture": {
+    "total_parameters": 60768773,
+    "trainable_parameters": 987653,
+    "frozen_parameters": 59781120,
+    "trainable_percentage": 1.625,
+    "use_lora": true,
+    "lora_rank": 32,
+    "d_model": 1024,
+    "num_layers": 6,
+    "num_classes": 5
+  },
+  "hyperparameters": {
+    "epochs": 12,
+    "warmup_epochs": 1,
+    "patience": 3,
+    "batch_size": 128,
+    "lr": 0.00025,
+    "gamma": 2.0,
+    "dir_weight": 0.5,
+    "hold_alpha": 0.25,
+    "lora_r": 32,
+    "lora_alpha": 64,
+    "standalone": true,
+    "pretrained_backbone": false
+  },
+  "training_duration_seconds": 190.8,
+  "training_duration_minutes": 3.18,
+  "best_validation_composite_score": 0.28446,
+  "sealed_holdout_metrics": {
+    "accuracy": 0.2309,
+    "macro_precision": 0.2637,
+    "macro_recall": 0.2798,
+    "macro_f1": 0.2253,
+    "non_hold_signals": 11079,
+    "non_hold_precision": 0.2195,
+    "directional_accuracy": 0.379,
+    "per_class": {
+      "0": {
+        "total_samples": 4271,
+        "true_positive": 251,
+        "false_positive": 288,
+        "false_negative": 4020,
+        "precision": 0.4657,
+        "recall": 0.0588,
+        "f1": 0.1044
+      },
+      "1": {
+        "total_samples": 1875,
+        "true_positive": 455,
+        "false_positive": 2089,
+        "false_negative": 1420,
+        "precision": 0.1789,
+        "recall": 0.2427,
+        "f1": 0.2059
+      },
+      "2": {
+        "total_samples": 1489,
+        "true_positive": 578,
+        "false_positive": 2131,
+        "false_negative": 911,
+        "precision": 0.2134,
+        "recall": 0.3882,
+        "f1": 0.2754
+      },
+      "3": {
+        "total_samples": 2032,
+        "true_positive": 384,
+        "false_positive": 1516,
+        "false_negative": 1648,
+        "precision": 0.2021,
+        "recall": 0.189,
+        "f1": 0.1953
+      },
+      "4": {
+        "total_samples": 1951,
+        "true_positive": 1015,
+        "false_positive": 2911,
+        "false_negative": 936,
+        "precision": 0.2585,
+        "recall": 0.5202,
+        "f1": 0.3454
+      }
+    },
+    "loss": 1.1473
+  },
+  "checkpoint_file": "C:\\Ngoding\\xau_deep_sniper\\checkpoints\\best_moment_15ch_lora.pt"
+}

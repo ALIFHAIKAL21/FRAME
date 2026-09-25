@@ -96,7 +96,7 @@ def main():
     print(f"      Tensor shape        : {X_train_sample.shape} (N={X_train_sample.shape[0]}, C={X_train_sample.shape[1]}, L={X_train_sample.shape[2]})")
     print(f"      Data type           : {X_train_sample.dtype}")
     print(f"      Memory footprint    : {X_train_sample.nbytes / 1024:.1f} KB")
-    assert X_train_sample.shape == (200 - L + 1, 9, L), "Shape mismatch!"
+    assert X_train_sample.shape == (200 - L + 1, fcfg.NUM_CHANNELS, L), "Shape mismatch!"
     print(f"      MOMENT Tensor Gate  : VERIFIED OK")
 
     # 7. Save Parquet Outputs & Report

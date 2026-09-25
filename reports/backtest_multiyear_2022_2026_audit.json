@@ -1,0 +1,434 @@
+{
+  "engine": "RealisticBacktestEngine (Tier 3 Institutional Sniper)",
+  "years_evaluated": [
+    2022,
+    2023,
+    2024,
+    2025,
+    2026
+  ],
+  "annual_summaries": [
+    {
+      "Year": "Jan - Agu 2022",
+      "Trades": 118,
+      "Wins": 74,
+      "Losses": 44,
+      "WinRatePct": 62.7,
+      "NetPnL": 2104.06,
+      "ReturnPct": 21.04,
+      "MaxDrawdownPct": -10.27,
+      "ProfitFactor": 1.44,
+      "GreenMonths": "7/8"
+    },
+    {
+      "Year": "Jan - Agu 2023",
+      "Trades": 114,
+      "Wins": 63,
+      "Losses": 51,
+      "WinRatePct": 55.3,
+      "NetPnL": 311.39,
+      "ReturnPct": 3.11,
+      "MaxDrawdownPct": -6.8,
+      "ProfitFactor": 1.06,
+      "GreenMonths": "3/8"
+    },
+    {
+      "Year": "Jan - Agu 2024",
+      "Trades": 114,
+      "Wins": 54,
+      "Losses": 60,
+      "WinRatePct": 47.4,
+      "NetPnL": -1752.03,
+      "ReturnPct": -17.52,
+      "MaxDrawdownPct": -24.82,
+      "ProfitFactor": 0.68,
+      "GreenMonths": "2/8"
+    },
+    {
+      "Year": "Jan - Agu 2025",
+      "Trades": 92,
+      "Wins": 57,
+      "Losses": 35,
+      "WinRatePct": 62.0,
+      "NetPnL": 1751.91,
+      "ReturnPct": 17.52,
+      "MaxDrawdownPct": -4.03,
+      "ProfitFactor": 1.47,
+      "GreenMonths": "5/8"
+    },
+    {
+      "Year": "Jan - Agu 2026",
+      "Trades": 72,
+      "Wins": 44,
+      "Losses": 28,
+      "WinRatePct": 61.1,
+      "NetPnL": 638.57,
+      "ReturnPct": 6.39,
+      "MaxDrawdownPct": -6.78,
+      "ProfitFactor": 1.23,
+      "GreenMonths": "5/8"
+    }
+  ],
+  "monthly_records": [
+    {
+      "Year": 2022,
+      "Month": "2022-01",
+      "Trades": 14,
+      "Wins": 11,
+      "WinRatePct": 78.6,
+      "NetPnL": 824.01,
+      "ProfitPct": 8.24
+    },
+    {
+      "Year": 2022,
+      "Month": "2022-02",
+      "Trades": 21,
+      "Wins": 8,
+      "WinRatePct": 38.1,
+      "NetPnL": -846.77,
+      "ProfitPct": -7.82
+    },
+    {
+      "Year": 2022,
+      "Month": "2022-03",
+      "Trades": 18,
+      "Wins": 13,
+      "WinRatePct": 72.2,
+      "NetPnL": 787.03,
+      "ProfitPct": 7.89
+    },
+    {
+      "Year": 2022,
+      "Month": "2022-04",
+      "Trades": 18,
+      "Wins": 12,
+      "WinRatePct": 66.7,
+      "NetPnL": 260.93,
+      "ProfitPct": 2.42
+    },
+    {
+      "Year": 2022,
+      "Month": "2022-05",
+      "Trades": 13,
+      "Wins": 7,
+      "WinRatePct": 53.8,
+      "NetPnL": 261.44,
+      "ProfitPct": 2.37
+    },
+    {
+      "Year": 2022,
+      "Month": "2022-06",
+      "Trades": 13,
+      "Wins": 9,
+      "WinRatePct": 69.2,
+      "NetPnL": 353.23,
+      "ProfitPct": 3.13
+    },
+    {
+      "Year": 2022,
+      "Month": "2022-07",
+      "Trades": 7,
+      "Wins": 6,
+      "WinRatePct": 85.7,
+      "NetPnL": 413.32,
+      "ProfitPct": 3.55
+    },
+    {
+      "Year": 2022,
+      "Month": "2022-08",
+      "Trades": 14,
+      "Wins": 8,
+      "WinRatePct": 57.1,
+      "NetPnL": 50.87,
+      "ProfitPct": 0.42
+    },
+    {
+      "Year": 2023,
+      "Month": "2023-01",
+      "Trades": 20,
+      "Wins": 11,
+      "WinRatePct": 55.0,
+      "NetPnL": -39.11,
+      "ProfitPct": -0.39
+    },
+    {
+      "Year": 2023,
+      "Month": "2023-02",
+      "Trades": 10,
+      "Wins": 6,
+      "WinRatePct": 60.0,
+      "NetPnL": -45.09,
+      "ProfitPct": -0.45
+    },
+    {
+      "Year": 2023,
+      "Month": "2023-03",
+      "Trades": 17,
+      "Wins": 9,
+      "WinRatePct": 52.9,
+      "NetPnL": 216.55,
+      "ProfitPct": 2.18
+    },
+    {
+      "Year": 2023,
+      "Month": "2023-04",
+      "Trades": 9,
+      "Wins": 4,
+      "WinRatePct": 44.4,
+      "NetPnL": -56.82,
+      "ProfitPct": -0.56
+    },
+    {
+      "Year": 2023,
+      "Month": "2023-05",
+      "Trades": 15,
+      "Wins": 8,
+      "WinRatePct": 53.3,
+      "NetPnL": -85.06,
+      "ProfitPct": -0.84
+    },
+    {
+      "Year": 2023,
+      "Month": "2023-06",
+      "Trades": 21,
+      "Wins": 13,
+      "WinRatePct": 61.9,
+      "NetPnL": 724.58,
+      "ProfitPct": 7.25
+    },
+    {
+      "Year": 2023,
+      "Month": "2023-07",
+      "Trades": 15,
+      "Wins": 7,
+      "WinRatePct": 46.7,
+      "NetPnL": -459.11,
+      "ProfitPct": -4.28
+    },
+    {
+      "Year": 2023,
+      "Month": "2023-08",
+      "Trades": 7,
+      "Wins": 5,
+      "WinRatePct": 71.4,
+      "NetPnL": 55.45,
+      "ProfitPct": 0.54
+    },
+    {
+      "Year": 2024,
+      "Month": "2024-01",
+      "Trades": 12,
+      "Wins": 8,
+      "WinRatePct": 66.7,
+      "NetPnL": 383.11,
+      "ProfitPct": 3.83
+    },
+    {
+      "Year": 2024,
+      "Month": "2024-02",
+      "Trades": 13,
+      "Wins": 6,
+      "WinRatePct": 46.2,
+      "NetPnL": -459.25,
+      "ProfitPct": -4.42
+    },
+    {
+      "Year": 2024,
+      "Month": "2024-03",
+      "Trades": 18,
+      "Wins": 7,
+      "WinRatePct": 38.9,
+      "NetPnL": -456.52,
+      "ProfitPct": -4.6
+    },
+    {
+      "Year": 2024,
+      "Month": "2024-04",
+      "Trades": 16,
+      "Wins": 5,
+      "WinRatePct": 31.2,
+      "NetPnL": -609.6,
+      "ProfitPct": -6.44
+    },
+    {
+      "Year": 2024,
+      "Month": "2024-05",
+      "Trades": 6,
+      "Wins": 1,
+      "WinRatePct": 16.7,
+      "NetPnL": -366.2,
+      "ProfitPct": -4.13
+    },
+    {
+      "Year": 2024,
+      "Month": "2024-06",
+      "Trades": 13,
+      "Wins": 7,
+      "WinRatePct": 53.8,
+      "NetPnL": -104.13,
+      "ProfitPct": -1.23
+    },
+    {
+      "Year": 2024,
+      "Month": "2024-07",
+      "Trades": 16,
+      "Wins": 8,
+      "WinRatePct": 50.0,
+      "NetPnL": -148.62,
+      "ProfitPct": -1.77
+    },
+    {
+      "Year": 2024,
+      "Month": "2024-08",
+      "Trades": 20,
+      "Wins": 12,
+      "WinRatePct": 60.0,
+      "NetPnL": 9.18,
+      "ProfitPct": 0.11
+    },
+    {
+      "Year": 2025,
+      "Month": "2025-01",
+      "Trades": 16,
+      "Wins": 8,
+      "WinRatePct": 50.0,
+      "NetPnL": -53.87,
+      "ProfitPct": -0.54
+    },
+    {
+      "Year": 2025,
+      "Month": "2025-02",
+      "Trades": 13,
+      "Wins": 8,
+      "WinRatePct": 61.5,
+      "NetPnL": 502.56,
+      "ProfitPct": 5.05
+    },
+    {
+      "Year": 2025,
+      "Month": "2025-03",
+      "Trades": 17,
+      "Wins": 13,
+      "WinRatePct": 76.5,
+      "NetPnL": 824.78,
+      "ProfitPct": 7.89
+    },
+    {
+      "Year": 2025,
+      "Month": "2025-04",
+      "Trades": 7,
+      "Wins": 3,
+      "WinRatePct": 42.9,
+      "NetPnL": -111.62,
+      "ProfitPct": -0.99
+    },
+    {
+      "Year": 2025,
+      "Month": "2025-05",
+      "Trades": 7,
+      "Wins": 5,
+      "WinRatePct": 71.4,
+      "NetPnL": 213.93,
+      "ProfitPct": 1.92
+    },
+    {
+      "Year": 2025,
+      "Month": "2025-06",
+      "Trades": 9,
+      "Wins": 5,
+      "WinRatePct": 55.6,
+      "NetPnL": -31.92,
+      "ProfitPct": -0.28
+    },
+    {
+      "Year": 2025,
+      "Month": "2025-07",
+      "Trades": 11,
+      "Wins": 7,
+      "WinRatePct": 63.6,
+      "NetPnL": 81.76,
+      "ProfitPct": 0.72
+    },
+    {
+      "Year": 2025,
+      "Month": "2025-08",
+      "Trades": 12,
+      "Wins": 8,
+      "WinRatePct": 66.7,
+      "NetPnL": 326.29,
+      "ProfitPct": 2.86
+    },
+    {
+      "Year": 2026,
+      "Month": "2026-01",
+      "Trades": 11,
+      "Wins": 7,
+      "WinRatePct": 63.6,
+      "NetPnL": 274.24,
+      "ProfitPct": 2.74
+    },
+    {
+      "Year": 2026,
+      "Month": "2026-02",
+      "Trades": 8,
+      "Wins": 7,
+      "WinRatePct": 87.5,
+      "NetPnL": 506.73,
+      "ProfitPct": 4.93
+    },
+    {
+      "Year": 2026,
+      "Month": "2026-03",
+      "Trades": 5,
+      "Wins": 4,
+      "WinRatePct": 80.0,
+      "NetPnL": 205.06,
+      "ProfitPct": 1.9
+    },
+    {
+      "Year": 2026,
+      "Month": "2026-04",
+      "Trades": 7,
+      "Wins": 4,
+      "WinRatePct": 57.1,
+      "NetPnL": 4.16,
+      "ProfitPct": 0.04
+    },
+    {
+      "Year": 2026,
+      "Month": "2026-05",
+      "Trades": 10,
+      "Wins": 7,
+      "WinRatePct": 70.0,
+      "NetPnL": 241.36,
+      "ProfitPct": 2.2
+    },
+    {
+      "Year": 2026,
+      "Month": "2026-06",
+      "Trades": 7,
+      "Wins": 3,
+      "WinRatePct": 42.9,
+      "NetPnL": -139.31,
+      "ProfitPct": -1.24
+    },
+    {
+      "Year": 2026,
+      "Month": "2026-07",
+      "Trades": 10,
+      "Wins": 7,
+      "WinRatePct": 70.0,
+      "NetPnL": -46.1,
+      "ProfitPct": -0.42
+    },
+    {
+      "Year": 2026,
+      "Month": "2026-08",
+      "Trades": 14,
+      "Wins": 5,
+      "WinRatePct": 35.7,
+      "NetPnL": -407.57,
+      "ProfitPct": -3.69
+    }
+  ]
+}

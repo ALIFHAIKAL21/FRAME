@@ -1,0 +1,118 @@
+{
+    "system_name": "FLOWDEV FRAME (Flowdev Recurrent Algorithmic Model for Trade Execution)",
+    "emblem": "The Cyber-Neural Peregrine Falcon",
+    "experiment": "Half-Capital Stress Test ($250 USD Modal)",
+    "target_year": 2025,
+    "initial_capital": 250.0,
+    "lot_size": 0.01,
+    "final_equity": 4490.11,
+    "net_profit": 4240.11,
+    "return_pct": 1696.04,
+    "total_trades": 1053,
+    "wins": 679,
+    "losses": 374,
+    "win_rate_pct": 64.48,
+    "profit_factor": 2.12,
+    "max_drawdown_pct": 6.79,
+    "min_equity": 236.48,
+    "avg_trades_per_day": 4.13,
+    "pct_days_4_to_5_trades": 77.3,
+    "monthly_summary": [
+        {
+            "month": "2025-01",
+            "trades": 96,
+            "wins": 67,
+            "win_rate": 69.8,
+            "pnl": 247.86,
+            "balance": 497.86
+        },
+        {
+            "month": "2025-02",
+            "trades": 82,
+            "wins": 57,
+            "win_rate": 69.5,
+            "pnl": 292.2,
+            "balance": 790.06
+        },
+        {
+            "month": "2025-03",
+            "trades": 84,
+            "wins": 57,
+            "win_rate": 67.9,
+            "pnl": 214.18,
+            "balance": 1004.24
+        },
+        {
+            "month": "2025-04",
+            "trades": 87,
+            "wins": 55,
+            "win_rate": 63.2,
+            "pnl": 492.47,
+            "balance": 1496.71
+        },
+        {
+            "month": "2025-05",
+            "trades": 94,
+            "wins": 61,
+            "win_rate": 64.9,
+            "pnl": 496.17,
+            "balance": 1992.88
+        },
+        {
+            "month": "2025-06",
+            "trades": 95,
+            "wins": 69,
+            "win_rate": 72.6,
+            "pnl": 618.67,
+            "balance": 2611.55
+        },
+        {
+            "month": "2025-07",
+            "trades": 93,
+            "wins": 57,
+            "win_rate": 61.3,
+            "pnl": 189.86,
+            "balance": 2801.41
+        },
+        {
+            "month": "2025-08",
+            "trades": 91,
+            "wins": 56,
+            "win_rate": 61.5,
+            "pnl": 177.12,
+            "balance": 2978.53
+        },
+        {
+            "month": "2025-09",
+            "trades": 80,
+            "wins": 46,
+            "win_rate": 57.5,
+            "pnl": 250.05,
+            "balance": 3228.58
+        },
+        {
+            "month": "2025-10",
+            "trades": 98,
+            "wins": 57,
+            "win_rate": 58.2,
+            "pnl": 440.97,
+            "balance": 3669.55
+        },
+        {
+            "month": "2025-11",
+            "trades": 74,
+            "wins": 47,
+            "win_rate": 63.5,
+            "pnl": 454.85,
+            "balance": 4124.4
+        },
+        {
+            "month": "2025-12",
+            "trades": 79,
+            "wins": 50,
+            "win_rate": 63.3,
+            "pnl": 365.71,
+            "balance": 4490.11
+        }
+    ]
+}

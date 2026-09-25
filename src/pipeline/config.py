@@ -139,3 +139,7 @@ FLAG_COLUMNS: List[str] = [
     "is_news_blackout",    # Akan diisi di TAHAP 2/3
     "entry_eligible",
 ]
+
+CHECKPOINTS_DIR = PROJECT_ROOT / "checkpoints"
+
+MODEL_REPORT_FILENAME = "model_training_report.json"

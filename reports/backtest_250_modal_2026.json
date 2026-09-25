@@ -1,0 +1,86 @@
+{
+    "system_name": "FLOWDEV FRAME (Flowdev Recurrent Algorithmic Model for Trade Execution)",
+    "emblem": "The Cyber-Neural Peregrine Falcon",
+    "experiment": "Half-Capital High-ATR Stress Test ($250 USD Modal)",
+    "target_year": "2026 (Jan - Aug)",
+    "initial_capital": 250.0,
+    "lot_size": 0.01,
+    "final_equity": 3603.82,
+    "net_profit": 3353.82,
+    "return_pct": 1341.53,
+    "total_trades": 706,
+    "wins": 418,
+    "losses": 288,
+    "win_rate_pct": 59.21,
+    "profit_factor": 1.52,
+    "max_drawdown_pct": 70.77,
+    "min_equity": 98.65,
+    "avg_trades_per_day": 4.18,
+    "pct_days_4_to_5_trades": 78.1,
+    "monthly_summary": [
+        {
+            "month": "2026-01",
+            "trades": 84,
+            "wins": 43,
+            "win_rate": 51.2,
+            "pnl": 104.53,
+            "balance": 354.53
+        },
+        {
+            "month": "2026-02",
+            "trades": 90,
+            "wins": 60,
+            "win_rate": 66.7,
+            "pnl": 878.64,
+            "balance": 1233.17
+        },
+        {
+            "month": "2026-03",
+            "trades": 91,
+            "wins": 59,
+            "win_rate": 64.8,
+            "pnl": 666.87,
+            "balance": 1900.04
+        },
+        {
+            "month": "2026-04",
+            "trades": 88,
+            "wins": 50,
+            "win_rate": 56.8,
+            "pnl": 293.45,
+            "balance": 2193.49
+        },
+        {
+            "month": "2026-05",
+            "trades": 81,
+            "wins": 44,
+            "win_rate": 54.3,
+            "pnl": 121.7,
+            "balance": 2315.19
+        },
+        {
+            "month": "2026-06",
+            "trades": 84,
+            "wins": 47,
+            "win_rate": 56.0,
+            "pnl": 352.92,
+            "balance": 2668.11
+        },
+        {
+            "month": "2026-07",
+            "trades": 96,
+            "wins": 61,
+            "win_rate": 63.5,
+            "pnl": 605.36,
+            "balance": 3273.47
+        },
+        {
+            "month": "2026-08",
+            "trades": 92,
+            "wins": 54,
+            "win_rate": 58.7,
+            "pnl": 330.35,
+            "balance": 3603.82
+        }
+    ]
+}

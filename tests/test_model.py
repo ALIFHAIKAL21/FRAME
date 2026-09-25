@@ -30,7 +30,7 @@ from models.moment_model import (
     LoRALinear,
     PatchEmbedding,
 )
-from models.loss import ClassBalancedFocalLoss
+from models.loss import ClassBalancedFocalLoss, DirectionalFocalLoss
 from models.trainer import (
     MOMENTTrainer,
     compute_classification_metrics,
@@ -178,3 +178,47 @@ class TestTrainerMicroStep:
         )
         assert len(res["history"]["train_loss"]) == 1
         assert res["best_val_f1"] >= 0.0
+
+
+class TestDirectionalFocalLoss:
+    def test_directional_loss_backward(self):
+        loss_fn = DirectionalFocalLoss(
+            alpha=[1.0, 1.1, 1.2, 1.1, 1.2],
+            gamma=2.5,
+            directional_weight=0.5,
+        )
+        logits = torch.randn(8, 5, requires_grad=True)
+        targets = torch.tensor([0, 1, 2, 3, 4, 0, 1, 3], dtype=torch.long)
+        loss = loss_fn(logits, targets)
+        assert loss.item() > 0.0
+        loss.backward()
+        assert logits.grad is not None
+        assert not torch.isnan(logits.grad).any()
+        assert not torch.isinf(logits.grad).any()
+
+    def test_directional_loss_hold_only_batch(self):
+        """Batch berisi hanya HOLD (0) tidak boleh error pada directional loss."""
+        loss_fn = DirectionalFocalLoss(directional_weight=0.5)
+        logits = torch.randn(4, 5, requires_grad=True)
+        targets = torch.zeros(4, dtype=torch.long)
+        loss = loss_fn(logits, targets)
+        assert loss.item() > 0.0
+        loss.backward()
+        assert logits.grad is not None
+
+    def test_directional_inversion_penalty(self):
+        """Prediksi salah arah (misal target BUY tapi logit SELL tinggi) harus menghasilkan loss lebih tinggi."""
+        loss_fn = DirectionalFocalLoss(gamma=2.0, directional_weight=1.0)
+        
+        # Target adalah BUY 1R (1)
+        target = torch.tensor([1], dtype=torch.long)
+        
+        # Logit benar (BUY logit tinggi)
+        logits_correct = torch.tensor([[0.0, 3.0, 2.0, -1.0, -1.0]])
+        loss_correct = loss_fn(logits_correct, target).item()
+        
+        # Logit salah arah (SELL logit tinggi)
+        logits_inverted = torch.tensor([[0.0, -1.0, -1.0, 3.0, 2.0]])
+        loss_inverted = loss_fn(logits_inverted, target).item()
+        
+        assert loss_inverted > loss_correct, f"Inverted ({loss_inverted}) must be > correct ({loss_correct})"

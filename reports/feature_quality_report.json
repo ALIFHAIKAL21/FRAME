@@ -1,5 +1,5 @@
 {
-  "timestamp_generated_utc": "2026-09-22T19:42:18.541478+00:00",
+  "timestamp_generated_utc": "2026-09-23T12:00:10.415794+00:00",
   "input_clean_bars": 58772,
   "warmup_bars_trimmed": 127,
   "valid_feature_bars": 58645,
@@ -9,10 +9,13 @@
     "ohlc_norm_low",
     "ohlc_norm_close",
     "volume_zscore",
-    "smi",
-    "ma_ribbon_slope",
-    "liquidity_distance",
-    "fvg_status"
+    "sma_cross_spread",
+    "smi_val",
+    "smi_signal_hist",
+    "smi_reversal_zone",
+    "order_block_zone",
+    "liquidity_sweep",
+    "valuation_regime"
   ],
   "train_set": {
     "bars": 46900,
@@ -90,40 +93,70 @@
       "status": "PASS",
       "issues": []
     },
-    "smi": {
+    "sma_cross_spread": {
       "count": 58517,
-      "mean": 0.0583,
-      "std": 0.5012,
-      "min": -0.9678,
-      "max": 0.9745,
+      "mean": 0.0667,
+      "std": 0.9882,
+      "min": -3.0,
+      "max": 3.0,
       "inf_count": 0,
       "status": "PASS",
       "issues": []
     },
-    "ma_ribbon_slope": {
+    "smi_val": {
       "count": 58517,
-      "mean": 0.0112,
-      "std": 0.197,
-      "min": -1.4083,
-      "max": 1.4644,
+      "mean": 0.0535,
+      "std": 0.4774,
+      "min": -0.9506,
+      "max": 0.9744,
       "inf_count": 0,
       "status": "PASS",
       "issues": []
     },
-    "liquidity_distance": {
+    "smi_signal_hist": {
       "count": 58517,
-      "mean": 0.0307,
-      "std": 0.7754,
-      "min": -5.0,
-      "max": 5.0,
+      "mean": 0.0007,
+      "std": 0.5239,
+      "min": -1.0,
+      "max": 1.0,
       "inf_count": 0,
       "status": "PASS",
       "issues": []
     },
-    "fvg_status": {
+    "smi_reversal_zone": {
       "count": 58517,
-      "mean": 0.0046,
-      "std": 0.5481,
+      "mean": -0.0369,
+      "std": 0.5369,
+      "min": -1.0,
+      "max": 1.0,
+      "inf_count": 0,
+      "status": "PASS",
+      "issues": []
+    },
+    "order_block_zone": {
+      "count": 58517,
+      "mean": -0.0016,
+      "std": 0.7207,
+      "min": -1.0,
+      "max": 1.0,
+      "inf_count": 0,
+      "status": "PASS",
+      "issues": []
+    },
+    "liquidity_sweep": {
+      "count": 58517,
+      "mean": 0.0014,
+      "std": 0.3715,
+      "min": -1.0,
+      "max": 1.0,
+      "inf_count": 0,
+      "status": "PASS",
+      "issues": []
+    },
+    "valuation_regime": {
+      "count": 58517,
+      "mean": 0.0543,
+      "std": 0.7149,
       "min": -1.0,
       "max": 1.0,
       "inf_count": 0,

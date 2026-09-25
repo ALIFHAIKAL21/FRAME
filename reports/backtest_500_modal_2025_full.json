@@ -1,0 +1,115 @@
+{
+    "target_year": 2025,
+    "initial_capital": 500.0,
+    "lot_size": 0.01,
+    "final_equity": 4740.11,
+    "net_profit": 4240.11,
+    "return_pct": 848.02,
+    "total_trades": 1053,
+    "wins": 679,
+    "losses": 374,
+    "win_rate_pct": 64.48,
+    "profit_factor": 2.12,
+    "max_drawdown_pct": 5.65,
+    "min_equity": 486.48,
+    "avg_trades_per_day": 4.08,
+    "pct_days_4_to_5_trades": 77.3,
+    "monthly_summary": [
+        {
+            "month": "2025-01",
+            "trades": 96,
+            "wins": 67,
+            "win_rate": 69.8,
+            "pnl": 247.86,
+            "balance": 747.86
+        },
+        {
+            "month": "2025-02",
+            "trades": 82,
+            "wins": 57,
+            "win_rate": 69.5,
+            "pnl": 292.2,
+            "balance": 1040.06
+        },
+        {
+            "month": "2025-03",
+            "trades": 84,
+            "wins": 57,
+            "win_rate": 67.9,
+            "pnl": 214.18,
+            "balance": 1254.24
+        },
+        {
+            "month": "2025-04",
+            "trades": 87,
+            "wins": 55,
+            "win_rate": 63.2,
+            "pnl": 492.47,
+            "balance": 1746.71
+        },
+        {
+            "month": "2025-05",
+            "trades": 94,
+            "wins": 61,
+            "win_rate": 64.9,
+            "pnl": 496.17,
+            "balance": 2242.88
+        },
+        {
+            "month": "2025-06",
+            "trades": 95,
+            "wins": 69,
+            "win_rate": 72.6,
+            "pnl": 618.67,
+            "balance": 2861.55
+        },
+        {
+            "month": "2025-07",
+            "trades": 93,
+            "wins": 57,
+            "win_rate": 61.3,
+            "pnl": 189.86,
+            "balance": 3051.41
+        },
+        {
+            "month": "2025-08",
+            "trades": 91,
+            "wins": 56,
+            "win_rate": 61.5,
+            "pnl": 177.12,
+            "balance": 3228.53
+        },
+        {
+            "month": "2025-09",
+            "trades": 80,
+            "wins": 46,
+            "win_rate": 57.5,
+            "pnl": 250.05,
+            "balance": 3478.58
+        },
+        {
+            "month": "2025-10",
+            "trades": 98,
+            "wins": 57,
+            "win_rate": 58.2,
+            "pnl": 440.97,
+            "balance": 3919.55
+        },
+        {
+            "month": "2025-11",
+            "trades": 74,
+            "wins": 47,
+            "win_rate": 63.5,
+            "pnl": 454.85,
+            "balance": 4374.4
+        },
+        {
+            "month": "2025-12",
+            "trades": 79,
+            "wins": 50,
+            "win_rate": 63.3,
+            "pnl": 365.71,
+            "balance": 4740.11
+        }
+    ]
+}

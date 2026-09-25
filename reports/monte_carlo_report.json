@@ -1,0 +1,12 @@
+{
+  "n_iterations": 1000,
+  "n_trades": 12,
+  "median_final_equity": 9969.92,
+  "p5_final_equity": 9969.92,
+  "p95_final_equity": 9969.92,
+  "mean_max_drawdown": -0.0199,
+  "p95_max_drawdown": -0.012,
+  "worst_case_drawdown": -0.0305,
+  "prob_circuit_breaker_trip": 0.0,
+  "prob_permanent_stop": 0.0
+}

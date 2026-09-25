@@ -1,16 +1,14 @@
-﻿"""
+"""
 XAU_DEEP_SNIPER - Technical Indicator Features (TAHAP 2B)
 ==========================================================
-Channel 6: Stochastic Momentum Index (SMI)
-Channel 7: Moving Average Ribbon Slope & Differential
+Channel 6: Moving Average Cross (SMA 9 x SMA 21 Spread / ATR)
+Channel 7: Stochastic Momentum Index (SMI 10, 3, 3, 10)
+Channel 8: SMI Signal & Histogram Differential
+Channel 9: SMI Overbought (+40) / Oversold (-40) Reversal Triggers
 
-Sesuai spec BAB 3.2:
-
-SMI = 100 * EMA(EMA(C - M)) / (0.5 * EMA(EMA(H - L)))
-dimana M = 0.5 * (HH + LL) pada lookback period
-
-MA Ribbon: Slope dan differential dari ribbon Fibonacci MA
-(8, 13, 21, 34, 55) dinormalisasi terhadap ATR.
+Sesuai spesifikasi AGENT.MD:
+- Indikator khusus 1: MA Cross (SMA 9 x SMA 21)
+- Indikator khusus 2: SMI (Stochastic Momentum Index) TradingView default (10, 3, 3, 10)
 
 PRINSIP:
 - Semua indikator CAUSAL (tanpa lookahead)
@@ -24,42 +22,32 @@ from . import feature_config as fcfg
 from .features_core import compute_ema, compute_atr
 
 
-def compute_smi(
+def compute_tradingview_smi(
     high: pd.Series,
     low: pd.Series,
     close: pd.Series,
-    lookback: int = None,
-    first_ema: int = None,
-    second_ema: int = None,
-) -> pd.Series:
+    lookback: int = 10,
+    first_ema: int = 3,
+    second_ema: int = 3,
+    signal_ema: int = 10,
+) -> pd.DataFrame:
     """
-    Stochastic Momentum Index sesuai spec BAB 3.2 Channel 6.
+    Stochastic Momentum Index (SMI) TradingView default (10, 3, 3, 10).
     
     Formula:
         M = 0.5 * (HH_n + LL_n)
         D = Close - M
         HL = HH_n - LL_n
-        SMI = 100 * EMA(EMA(D, k1), k2) / (0.5 * EMA(EMA(HL, k1), k2))
-    
-    Output di-clamp ke [-100, +100], lalu di-rescale ke [-1, +1].
-    
-    Parameters
-    ----------
-    high, low, close : pd.Series
-        OHLC data.
-    lookback : int
-        Lookback period untuk highest-high / lowest-low.
-    first_ema, second_ema : int
-        EMA smoothing periods.
+        SMI = 100 * EMA(EMA(D, 3), 3) / (0.5 * EMA(EMA(HL, 3), 3))
+        Signal = EMA(SMI, 10)
+        Hist = SMI - Signal
     
     Returns
     -------
-    pd.Series
-        SMI values dalam range [-1, +1].
+    pd.DataFrame
+        Kolom: smi_val (rescaled [-1, 1]), smi_signal_hist (rescaled [-1, 1]),
+        smi_reversal_zone (+1 OS bull reversal, -1 OB bear reversal, 0 neutral)
     """
-    lookback = lookback or fcfg.SMI_LOOKBACK
-    first_ema = first_ema or fcfg.SMI_FIRST_EMA
-    second_ema = second_ema or fcfg.SMI_SECOND_EMA
     eps = fcfg.EPSILON
     
     # Highest High dan Lowest Low pada lookback period
@@ -68,11 +56,7 @@ def compute_smi(
     
     # Midpoint M
     m = 0.5 * (hh + ll)
-    
-    # Deviation dari midpoint
     d = close - m
-    
-    # Range
     hl_range = hh - ll
     
     # Double EMA smoothing
@@ -82,117 +66,81 @@ def compute_smi(
     hl_ema1 = hl_range.ewm(span=first_ema, min_periods=first_ema, adjust=False).mean()
     hl_ema2 = hl_ema1.ewm(span=second_ema, min_periods=second_ema, adjust=False).mean()
     
-    # SMI = 100 * d_smooth / (0.5 * hl_smooth)
     denominator = 0.5 * hl_ema2
-    smi = 100.0 * d_ema2 / denominator.clip(lower=eps)
+    smi_raw = 100.0 * d_ema2 / denominator.clip(lower=eps)
+    smi_raw = smi_raw.clip(-100.0, 100.0)
     
-    # Clamp ke [-100, +100] lalu rescale ke [-1, +1]
-    smi = smi.clip(-100.0, 100.0) / 100.0
+    # Signal Line (10-period EMA of SMI)
+    smi_signal = smi_raw.ewm(span=signal_ema, min_periods=signal_ema, adjust=False).mean()
+    smi_hist = smi_raw - smi_signal
     
-    return smi
+    # Reversal Triggers:
+    # Bull reversal: previous bar was in Oversold (< -40) and current bar crosses back above -40 or signal
+    prev_smi = smi_raw.shift(1)
+    os_reversal_bull = (prev_smi < -40.0) & (smi_raw > prev_smi)
+    ob_reversal_bear = (prev_smi > 40.0) & (smi_raw < prev_smi)
+    
+    reversal_zone = pd.Series(0.0, index=close.index)
+    reversal_zone[os_reversal_bull] = 1.0
+    reversal_zone[ob_reversal_bear] = -1.0
+    
+    result = pd.DataFrame(index=close.index)
+    # Rescale to [-1, 1] for neural network
+    result["smi_val"] = smi_raw / 100.0
+    result["smi_signal_hist"] = (smi_hist / 50.0).clip(-1.0, 1.0)
+    result["smi_reversal_zone"] = reversal_zone
+    
+    # Backward compatibility column 'smi'
+    result["smi"] = result["smi_val"]
+    
+    return result
 
 
-def compute_ma_ribbon_features(
+def compute_sma_cross_features(
     close: pd.Series,
     high: pd.Series,
     low: pd.Series,
-    periods: list = None,
-    slope_window: int = None,
+    fast_period: int = 9,
+    slow_period: int = 21,
 ) -> pd.DataFrame:
     """
-    Moving Average Ribbon slope & differential sesuai spec BAB 3.2 Channel 7.
-    
-    Menghitung:
-    1. EMA untuk setiap period di ribbon
-    2. Slope (rate of change) dari EMA tercepat, dinormalisasi ATR
-    3. Differential: spread antara EMA tercepat dan terlambat, dinormalisasi ATR
-    4. Alignment score: berapa persen EMA yang "in order" (bullish/bearish alignment)
-    
-    Output: satu kolom komposit yang menggabungkan slope + alignment.
-    
-    Parameters
-    ----------
-    close : pd.Series
-        Close price.
-    high, low : pd.Series
-        Untuk ATR normalization.
-    periods : list
-        EMA periods (default: Fibonacci [8, 13, 21, 34, 55]).
-    slope_window : int
-        Window untuk menghitung slope.
+    Moving Average Cross (SMA 9 x SMA 21) sesuai AGENT.MD.
     
     Returns
     -------
     pd.DataFrame
-        Kolom: ma_ribbon_slope, ma_ribbon_spread, ma_ribbon_alignment
+        Kolom: sma_cross_spread (normalized by ATR), sma_trend
     """
-    periods = periods or fcfg.MA_RIBBON_PERIODS
-    slope_window = slope_window or fcfg.MA_RIBBON_SLOPE_WINDOW
     eps = fcfg.EPSILON
+    atr = compute_atr(high, low, close, fcfg.ATR_NORMALIZE_PERIOD).clip(lower=eps)
     
-    # Hitung ATR untuk normalisasi
-    atr = compute_atr(high, low, close, fcfg.ATR_NORMALIZE_PERIOD)
-    atr_safe = atr.clip(lower=eps)
+    sma_fast = close.rolling(window=fast_period, min_periods=fast_period).mean()
+    sma_slow = close.rolling(window=slow_period, min_periods=slow_period).mean()
     
-    # Hitung semua EMA
-    emas = {}
-    for p in sorted(periods):
-        emas[p] = compute_ema(close, p)
-    
-    sorted_periods = sorted(periods)
-    fastest = sorted_periods[0]
-    slowest = sorted_periods[-1]
+    spread = sma_fast - sma_slow
+    norm_spread = (spread / atr).clip(-3.0, 3.0)
     
     result = pd.DataFrame(index=close.index)
-    
-    # 1. Slope: rate of change dari EMA tercepat, normalized by ATR
-    fastest_ema = emas[fastest]
-    slope_raw = fastest_ema.diff(slope_window) / slope_window
-    result["ma_ribbon_slope"] = (slope_raw / atr_safe).clip(-5.0, 5.0)
-    
-    # 2. Spread: jarak antara EMA tercepat dan terlambat, normalized by ATR
-    spread_raw = emas[fastest] - emas[slowest]
-    result["ma_ribbon_spread"] = (spread_raw / atr_safe).clip(-5.0, 5.0)
-    
-    # 3. Alignment: perfect bullish = +1, perfect bearish = -1, mixed = 0
-    # Hitung berapa EMA yang "in order" (faster > slower)
-    n_pairs = len(sorted_periods) - 1
-    alignment = pd.Series(0.0, index=close.index)
-    for i in range(n_pairs):
-        faster_p = sorted_periods[i]
-        slower_p = sorted_periods[i + 1]
-        # +1 jika faster > slower (bullish), -1 jika sebaliknya
-        alignment += np.where(emas[faster_p] > emas[slower_p], 1.0, -1.0)
-    result["ma_ribbon_alignment"] = alignment / n_pairs  # Normalize ke [-1, +1]
+    result["sma_cross_spread"] = norm_spread
+    result["ma_ribbon_slope"] = norm_spread  # Backward compatibility
     
     return result
 
 
 def build_technical_features(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Membangun Channel 6-7 (technical indicator features).
-    
-    Parameters
-    ----------
-    df : pd.DataFrame
-        DataFrame dengan kolom OHLC.
-    
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame dengan kolom baru: smi, ma_ribbon_slope, 
-        ma_ribbon_spread, ma_ribbon_alignment
+    Membangun Channel 6-9 (technical indicator features).
     """
     df = df.copy()
     
-    # Channel 6: SMI
-    df["smi"] = compute_smi(df["high"], df["low"], df["close"])
-    
-    # Channel 7: MA Ribbon (3 sub-features, akan di-composite nanti)
-    ribbon = compute_ma_ribbon_features(
-        df["close"], df["high"], df["low"]
-    )
-    for col in ribbon.columns:
-        df[col] = ribbon[col]
-    
+    # Channels 7-9: SMI components
+    smi_df = compute_tradingview_smi(df["high"], df["low"], df["close"])
+    for col in smi_df.columns:
+        df[col] = smi_df[col]
+        
+    # Channel 6: SMA 9x21 Cross Spread
+    sma_df = compute_sma_cross_features(df["close"], df["high"], df["low"])
+    for col in sma_df.columns:
+        df[col] = sma_df[col]
+        
     return df

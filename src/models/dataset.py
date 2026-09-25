@@ -1,16 +1,21 @@
 """
-XAU_DEEP_SNIPER - PyTorch Dataset & DataLoader Module (TAHAP 4A)
-==================================================================
+XAU_DEEP_SNIPER - High-Performance PyTorch Dataset & DataLoader Module (15 Channels)
+=====================================================================================
 Mengonversi dataset fitur berlabel menjadi sliding window tensors
 untuk arsitektur Foundation Model MOMENT-1-large.
 
-Spesifikasi Tensor (BAB 5.1):
+Spesifikasi Tensor (BAB 5.1 & UPGRADE.MD):
 - Input Tensor Shape: (B x C x L)
-  * B: Batch size
-  * C: 9 feature channels
+  * B: Batch size (e.g. 128)
+  * C: 15 feature channels (12 baseline + 3 H4 macro)
   * L: 64 bars M30 (lookback window t-63 s.d. t)
 - Target Tensor: Class integer a_t in {0, 1, 2, 3, 4} (dtype torch.long)
 - Data type: torch.float32
+
+OPTIMASI KECEPATAN NON-PINTAS:
+- Pre-allocated contiguous in-memory tensors:
+  Seluruh window disimpan dalam satu blok tensor contiguous di RAM (~180 MB).
+  Pengambilan batch di DataLoader berjalan tanpa copy overhead (zero-copy memory slicing).
 """
 
 import torch
@@ -21,17 +26,23 @@ from numpy.lib.stride_tricks import sliding_window_view
 from typing import List, Tuple, Optional, Union
 import pathlib
 
-# 9 Feature Channels sesuai BAB 3.2
+# 15 Feature Channels sesuai BAB 3.2 & UPGRADE.MD
 DEFAULT_FEATURE_CHANNELS: List[str] = [
     "ohlc_norm_open",      # Ch 1: Open normalized
     "ohlc_norm_high",      # Ch 2: High normalized
     "ohlc_norm_low",       # Ch 3: Low normalized
     "ohlc_norm_close",     # Ch 4: Close normalized
     "volume_zscore",       # Ch 5: Volume Z-score
-    "smi",                 # Ch 6: Stochastic Momentum Index
-    "ma_ribbon_slope",     # Ch 7: MA Ribbon Slope
-    "liquidity_distance",  # Ch 8: Liquidity Pool Distance
-    "fvg_status",          # Ch 9: Fair Value Gap Status
+    "sma_cross_spread",    # Ch 6: MA Cross (SMA 9 x SMA 21 spread / ATR)
+    "smi_val",             # Ch 7: Stochastic Momentum Index (10, 3, 3, 10) in [-1, 1]
+    "smi_signal_hist",     # Ch 8: SMI Signal Line Difference / Momentum
+    "smi_reversal_zone",   # Ch 9: SMI +/-40 Reversal Signal (+1 OS bull, -1 OB bear)
+    "order_block_zone",    # Ch 10: Supply / Demand Order Block (+1 Demand, -1 Supply)
+    "liquidity_sweep",     # Ch 11: Liquidity Sweeps (+1 SSL sweep, -1 BSL sweep)
+    "valuation_regime",    # Ch 12: Premium/Discount Valuation & Sideways Regime
+    "h4_macro_trend_velocity",        # Ch 13: H4 Macro Velocity
+    "h4_market_structure",            # Ch 14: H4 Structural Ribbon Alignment
+    "momentum_expansion_persistence", # Ch 15: Expansion Persistence & Proximity
 ]
 
 DEFAULT_SEQUENCE_LENGTH: int = 64  # L = 64 bar M30
@@ -39,18 +50,7 @@ DEFAULT_SEQUENCE_LENGTH: int = 64  # L = 64 bar M30
 
 class XAUTimeSeriesDataset(Dataset):
     """
-    PyTorch Dataset untuk sliding window tensor (C, L) dan label target diskrit a.
-    
-    Parameters
-    ----------
-    df : pd.DataFrame
-        DataFrame berlabel (harus memuat 9 kolom fitur dan kolom 'action').
-    sequence_length : int
-        Panjang jendela lookback L (default 64 bar M30).
-    feature_channels : list of str
-        Daftar nama kolom channel fitur (default 9 channel).
-    target_column : str
-        Nama kolom target (default 'action').
+    High-Performance PyTorch Dataset untuk sliding window tensor (C, L) dan target diskrit a.
     """
 
     def __init__(
@@ -81,35 +81,28 @@ class XAUTimeSeriesDataset(Dataset):
         # Ambil matriks fitur (T, C)
         feature_data = df[self.feature_channels].values.astype(np.float32)
 
-        # Bentuk zero-copy sliding window view (N, C, L)
-        # sliding_window_view sepanjang axis 0 dengan window_shape = sequence_length
-        # Menghasilkan shape: (N, C, L)
-        self.windows = sliding_window_view(feature_data, window_shape=self.sequence_length, axis=0)
+        # Bentuk sliding window view (N, C, L)
+        windows = sliding_window_view(feature_data, window_shape=self.sequence_length, axis=0)
+        targets = df[self.target_column].iloc[self.sequence_length - 1:].values.astype(np.int64)
 
-        # Target label a_t pada akhir setiap window (bar t = idx + sequence_length - 1)
-        self.targets = df[self.target_column].iloc[self.sequence_length - 1:].values.astype(np.int64)
+        # Pre-allocate contiguous PyTorch tensors in RAM (Zero-Copy Slicing)
+        self.x_tensor = torch.from_numpy(np.ascontiguousarray(windows))
+        self.y_tensor = torch.from_numpy(np.ascontiguousarray(targets))
 
         # Timestamps pada bar t (akhir window) untuk audit dan evaluasi
         if "timestamp_utc" in df.columns:
             self.timestamps = df["timestamp_utc"].iloc[self.sequence_length - 1:].reset_index(drop=True)
         else:
-            self.timestamps = pd.Series(range(len(self.targets)))
+            self.timestamps = pd.Series(range(len(targets)))
 
-        self.n_samples = len(self.targets)
-        assert len(self.windows) == self.n_samples, "Mismatch antara jumlah windows dan targets"
+        self.n_samples = len(self.y_tensor)
+        assert len(self.x_tensor) == self.n_samples, "Mismatch antara jumlah windows dan targets"
 
     def __len__(self) -> int:
         return self.n_samples
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Mengembalikan:
-        - x: torch.FloatTensor shape (C, L) = (9, 64)
-        - y: torch.LongTensor scalar int64 in {0, 1, 2, 3, 4}
-        """
-        x = torch.from_numpy(self.windows[idx].copy())  # shape: (9, 64)
-        y = torch.tensor(self.targets[idx], dtype=torch.long)
-        return x, y
+        return self.x_tensor[idx], self.y_tensor[idx]
 
     def get_timestamp(self, idx: int) -> pd.Timestamp:
         """Mengembalikan timestamp UTC pada akhir window ke-idx."""
@@ -119,17 +112,14 @@ class XAUTimeSeriesDataset(Dataset):
 def create_dataloaders(
     train_df: pd.DataFrame,
     test_df: pd.DataFrame,
-    batch_size: int = 64,
+    batch_size: int = 128,
     sequence_length: int = DEFAULT_SEQUENCE_LENGTH,
     feature_channels: Optional[List[str]] = None,
     num_workers: int = 0,
-    pin_memory: bool = False,
+    pin_memory: bool = True,
 ) -> Tuple[DataLoader, DataLoader, XAUTimeSeriesDataset, XAUTimeSeriesDataset]:
     """
-    Membuat DataLoader untuk training dan testing.
-    
-    Training loader di-shuffle untuk stochastic gradient descent.
-    Testing loader sequential tanpa shuffle untuk walk-forward temporal evaluation.
+    Membuat DataLoader teroptimasi untuk training dan testing.
     """
     train_dataset = XAUTimeSeriesDataset(
         train_df,

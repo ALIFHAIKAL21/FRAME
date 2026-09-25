@@ -1,0 +1,115 @@
+{
+    "target_year": 2023,
+    "initial_capital": 500.0,
+    "lot_size": 0.01,
+    "final_equity": 1950.66,
+    "net_profit": 1450.66,
+    "return_pct": 290.13,
+    "total_trades": 1053,
+    "wins": 699,
+    "losses": 354,
+    "win_rate_pct": 66.38,
+    "profit_factor": 2.08,
+    "max_drawdown_pct": 5.28,
+    "min_equity": 489.53,
+    "avg_trades_per_day": 4.1,
+    "pct_days_4_to_5_trades": 78.8,
+    "monthly_summary": [
+        {
+            "month": "2023-01",
+            "trades": 89,
+            "wins": 59,
+            "win_rate": 66.3,
+            "pnl": 146.35,
+            "balance": 646.35
+        },
+        {
+            "month": "2023-02",
+            "trades": 78,
+            "wins": 48,
+            "win_rate": 61.5,
+            "pnl": 99.29,
+            "balance": 745.64
+        },
+        {
+            "month": "2023-03",
+            "trades": 91,
+            "wins": 58,
+            "win_rate": 63.7,
+            "pnl": 105.87,
+            "balance": 851.51
+        },
+        {
+            "month": "2023-04",
+            "trades": 88,
+            "wins": 61,
+            "win_rate": 69.3,
+            "pnl": 173.01,
+            "balance": 1024.52
+        },
+        {
+            "month": "2023-05",
+            "trades": 96,
+            "wins": 65,
+            "win_rate": 67.7,
+            "pnl": 190.04,
+            "balance": 1214.56
+        },
+        {
+            "month": "2023-06",
+            "trades": 92,
+            "wins": 62,
+            "win_rate": 67.4,
+            "pnl": 170.38,
+            "balance": 1384.94
+        },
+        {
+            "month": "2023-07",
+            "trades": 90,
+            "wins": 58,
+            "win_rate": 64.4,
+            "pnl": 103.23,
+            "balance": 1488.17
+        },
+        {
+            "month": "2023-08",
+            "trades": 91,
+            "wins": 60,
+            "win_rate": 65.9,
+            "pnl": 70.2,
+            "balance": 1558.37
+        },
+        {
+            "month": "2023-09",
+            "trades": 85,
+            "wins": 63,
+            "win_rate": 74.1,
+            "pnl": 112.68,
+            "balance": 1671.05
+        },
+        {
+            "month": "2023-10",
+            "trades": 78,
+            "wins": 41,
+            "win_rate": 52.6,
+            "pnl": 37.35,
+            "balance": 1708.4
+        },
+        {
+            "month": "2023-11",
+            "trades": 97,
+            "wins": 69,
+            "win_rate": 71.1,
+            "pnl": 116.42,
+            "balance": 1824.82
+        },
+        {
+            "month": "2023-12",
+            "trades": 78,
+            "wins": 55,
+            "win_rate": 70.5,
+            "pnl": 125.84,
+            "balance": 1950.66
+        }
+    ]
+}

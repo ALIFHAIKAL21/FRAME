@@ -1,0 +1,84 @@
+{
+    "system_name": "FLOWDEV FRAME (Flowdev Recurrent Algorithmic Model for Trade Execution)",
+    "emblem": "The Cyber-Neural Peregrine Falcon",
+    "initial_capital": 500.0,
+    "lot_size": 0.01,
+    "final_equity": 4458.87,
+    "net_profit": 3958.87,
+    "return_pct": 791.77,
+    "total_trades": 706,
+    "wins": 427,
+    "losses": 279,
+    "win_rate_pct": 60.48,
+    "profit_factor": 1.81,
+    "max_drawdown_pct": 33.07,
+    "min_equity": 433.24,
+    "avg_trades_per_day": 4.13,
+    "pct_days_4_to_5_trades": 78.1,
+    "monthly_summary": [
+        {
+            "month": "2026-01",
+            "trades": 84,
+            "wins": 46,
+            "win_rate": 54.8,
+            "pnl": 213.97,
+            "balance": 713.97
+        },
+        {
+            "month": "2026-02",
+            "trades": 90,
+            "wins": 61,
+            "win_rate": 67.8,
+            "pnl": 949.83,
+            "balance": 1663.8
+        },
+        {
+            "month": "2026-03",
+            "trades": 91,
+            "wins": 57,
+            "win_rate": 62.6,
+            "pnl": 666.49,
+            "balance": 2330.29
+        },
+        {
+            "month": "2026-04",
+            "trades": 88,
+            "wins": 52,
+            "win_rate": 59.1,
+            "pnl": 420.87,
+            "balance": 2751.16
+        },
+        {
+            "month": "2026-05",
+            "trades": 81,
+            "wins": 46,
+            "win_rate": 56.8,
+            "pnl": 155.89,
+            "balance": 2907.05
+        },
+        {
+            "month": "2026-06",
+            "trades": 84,
+            "wins": 50,
+            "win_rate": 59.5,
+            "pnl": 538.89,
+            "balance": 3445.94
+        },
+        {
+            "month": "2026-07",
+            "trades": 96,
+            "wins": 60,
+            "win_rate": 62.5,
+            "pnl": 593.8,
+            "balance": 4039.74
+        },
+        {
+            "month": "2026-08",
+            "trades": 92,
+            "wins": 55,
+            "win_rate": 59.8,
+            "pnl": 419.13,
+            "balance": 4458.87
+        }
+    ]
+}

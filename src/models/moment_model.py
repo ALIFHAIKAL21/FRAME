@@ -33,7 +33,7 @@ from typing import Optional, Tuple, Dict, Any, Union
 
 @dataclass
 class MOMENTConfig:
-    n_channels: int = 9           # C = 9 feature channels (BAB 3.2)
+    n_channels: int = 15           # C = 9 feature channels (BAB 3.2)
     seq_len: int = 64             # L = 64 bars M30 (t-63 to t)
     patch_len: int = 8            # Patch size P = 8 bars (4 jam per patch)
     patch_stride: int = 8         # Non-overlapping patches (stride = 8)
@@ -44,8 +44,8 @@ class MOMENTConfig:
     dropout: float = 0.2          # Spec BAB 5.1: dropout 0.2
     num_classes: int = 5          # 5 discrete action classes (BAB 4.2)
     use_lora: bool = True         # PEFT / LoRA (BAB 6.3)
-    lora_r: int = 8               # LoRA rank r = 8
-    lora_alpha: int = 16          # LoRA scaling alpha = 16
+    lora_r: int = 32              # LoRA rank r = 32 (Iterasi 2)
+    lora_alpha: int = 64          # LoRA scaling alpha = 64
     lora_dropout: float = 0.05    # LoRA adapter dropout
     use_pretrained_backbone: bool = False  # Set True untuk AutonLab/MOMENT-1-large
 
@@ -62,7 +62,7 @@ class PatchEmbedding(nn.Module):
 
     def __init__(
         self,
-        n_channels: int = 9,
+        n_channels: int = 15,
         seq_len: int = 64,
         patch_len: int = 8,
         patch_stride: int = 8,
@@ -158,11 +158,14 @@ class PretrainedMOMENTClassifier(nn.Module):
         self,
         weights_path: Optional[str] = None,
         num_classes: int = 5,
+        n_channels: int = 15,
         dropout: float = 0.2,
-        lora_r: int = 8,
-        lora_alpha: int = 16,
+        lora_r: int = 32,
+        lora_alpha: int = 64,
         lora_dropout: float = 0.05,
+        target_modules: Optional[list] = None,
     ):
+        self.n_channels = n_channels
         super().__init__()
         import safetensors.torch
         from transformers import T5Config, T5EncoderModel
@@ -184,19 +187,22 @@ class PretrainedMOMENTClassifier(nn.Module):
         state_dict = safetensors.torch.load_file(weights_path, device="cpu")
         base_encoder.load_state_dict(state_dict, strict=False)
 
-        # 4. Pasang LoRA Adapters pada Query (q) dan Value (v)
+        # 4. Pasang Deep LoRA Adapters pada seluruh Proyeksi Atensi (q, k, v, o)
+        if target_modules is None:
+            target_modules = ["q", "k", "v", "o"]
+
         lora_config = LoraConfig(
             r=lora_r,
             lora_alpha=lora_alpha,
-            target_modules=["q", "v"],
+            target_modules=target_modules,
             lora_dropout=lora_dropout,
             bias="none",
         )
         self.encoder = get_peft_model(base_encoder, lora_config)
 
-        # 5. Patch Embedding khusus 9 Channel XAU/USD
+        # 5. Patch Embedding khusus 12 Channel XAU/USD (MA Cross, SMI, SMC)
         self.patch_embed = PatchEmbedding(
-            n_channels=9,
+            n_channels=n_channels,
             seq_len=64,
             patch_len=8,
             patch_stride=8,

@@ -1,204 +1,97 @@
 {
-  "timestamp_utc": "2026-09-22T20:56:18.006003+00:00",
+  "timestamp_utc": "2026-09-23T14:37:59.322212+00:00",
   "model_architecture": {
     "model_type": "PretrainedMOMENT-1-large (Carnegie Mellon University)",
-    "total_parameters": 342894085,
-    "trainable_parameters": 1662981,
+    "total_parameters": 344491525,
+    "trainable_parameters": 3260421,
     "frozen_parameters": 341231104,
-    "trainable_percentage": 0.485,
+    "trainable_percentage": 0.946,
     "d_model": 1024,
-    "num_classes": 5
+    "num_classes": 5,
+    "n_channels": 12,
+    "features": [
+      "ohlc_norm_open",
+      "ohlc_norm_high",
+      "ohlc_norm_low",
+      "ohlc_norm_close",
+      "volume_zscore",
+      "sma_cross_spread",
+      "smi_val",
+      "smi_signal_hist",
+      "smi_reversal_zone",
+      "order_block_zone",
+      "liquidity_sweep",
+      "valuation_regime"
+    ]
   },
   "hyperparameters": {
-    "epochs": 12,
-    "warmup_epochs": 1,
+    "epochs": 30,
+    "warmup_epochs": 2,
     "batch_size": 32,
     "grad_accum": 2,
     "effective_batch_size": 64,
     "learning_rate": 0.0002,
     "gamma": 2.0,
-    "alpha_weights": [
-      0.4323,
-      1.0979,
-      1.1903,
-      1.1038,
-      1.1757
-    ],
-    "device": "cuda",
-    "use_amp": true,
+    "dir_weight": 0.5,
+    "hold_alpha": 0.43,
     "lora_r": 16,
-    "lora_alpha": 32
+    "lora_alpha": 32,
+    "device": "cuda",
+    "use_amp": true
   },
-  "training_history": {
-    "epoch": [
-      1,
-      2,
-      3,
-      4,
-      5,
-      6,
-      7,
-      8,
-      9,
-      10,
-      11,
-      12
-    ],
-    "train_loss": [
-      0.935,
-      0.8892,
-      0.8732,
-      0.848,
-      0.8235,
-      0.8088,
-      0.7978,
-      0.7913,
-      0.7874,
-      0.7832,
-      0.7774,
-      0.7789
-    ],
-    "train_acc": [
-      0.2031,
-      0.2302,
-      0.2632,
-      0.3005,
-      0.3183,
-      0.3285,
-      0.3314,
-      0.3324,
-      0.3376,
-      0.3383,
-      0.3468,
-      0.3434
-    ],
-    "val_loss": [
-      0.9184,
-      0.9155,
-      0.8983,
-      0.8899,
-      0.871,
-      0.8547,
-      0.8643,
-      0.8572,
-      0.863,
-      0.8622,
-      0.8658,
-      0.8647
-    ],
-    "val_acc": [
-      0.1908,
-      0.2694,
-      0.2179,
-      0.2575,
-      0.2824,
-      0.2529,
-      0.2722,
-      0.2716,
-      0.2784,
-      0.2826,
-      0.2765,
-      0.2778
-    ],
-    "val_f1": [
-      0.1589,
-      0.1759,
-      0.2007,
-      0.2311,
-      0.2321,
-      0.236,
-      0.2469,
-      0.2522,
-      0.2485,
-      0.2436,
-      0.2532,
-      0.2523
-    ],
-    "val_non_hold_prec": [
-      0.1655,
-      0.1725,
-      0.1739,
-      0.208,
-      0.2241,
-      0.2204,
-      0.2264,
-      0.2296,
-      0.2278,
-      0.2299,
-      0.228,
-      0.2291
-    ],
-    "val_dir_acc": [
-      0.3182,
-      0.3372,
-      0.3417,
-      0.3874,
-      0.3968,
-      0.3945,
-      0.3974,
-      0.4003,
-      0.3993,
-      0.3982,
-      0.3995,
-      0.4004
-    ]
-  },
+  "training_duration_minutes": 142.0,
+  "best_validation_composite_score": 0.29962,
+  "best_epoch": 4,
   "sealed_holdout_metrics": {
-    "accuracy": 0.2765,
-    "macro_precision": 0.2675,
-    "macro_recall": 0.2923,
-    "macro_f1": 0.2532,
-    "non_hold_signals": 9352,
-    "non_hold_precision": 0.228,
-    "directional_accuracy": 0.3995,
+    "accuracy": 0.3097,
+    "macro_precision": 0.2898,
+    "macro_recall": 0.289,
+    "macro_f1": 0.2159,
+    "non_hold_signals": 7376,
+    "non_hold_precision": 0.2314,
+    "directional_accuracy": 0.4097,
     "per_class": {
       "0": {
         "total_samples": 4271,
-        "true_positive": 1080,
-        "false_positive": 1186,
-        "false_negative": 3191,
-        "precision": 0.4766,
-        "recall": 0.2529,
-        "f1": 0.3304
+        "true_positive": 1891,
+        "false_positive": 2351,
+        "precision": 0.446,
+        "recall": 0.443,
+        "f1": 0.444
       },
       "1": {
         "total_samples": 1875,
-        "true_positive": 194,
-        "false_positive": 889,
-        "false_negative": 1681,
-        "precision": 0.1791,
-        "recall": 0.1035,
-        "f1": 0.1312
+        "true_positive": 2,
+        "false_positive": 16,
+        "precision": 0.111,
+        "recall": 0.001,
+        "f1": 0.002
       },
       "2": {
         "total_samples": 1489,
-        "true_positive": 740,
-        "false_positive": 2448,
-        "false_negative": 749,
-        "precision": 0.2321,
-        "recall": 0.497,
-        "f1": 0.3164
+        "true_positive": 800,
+        "false_positive": 2921,
+        "precision": 0.215,
+        "recall": 0.537,
+        "f1": 0.307
       },
       "3": {
         "total_samples": 2032,
-        "true_positive": 276,
-        "false_positive": 1098,
-        "false_negative": 1756,
-        "precision": 0.2009,
-        "recall": 0.1358,
-        "f1": 0.1621
+        "true_positive": 3,
+        "false_positive": 4,
+        "precision": 0.429,
+        "recall": 0.002,
+        "f1": 0.003
       },
       "4": {
         "total_samples": 1951,
-        "true_positive": 922,
-        "false_positive": 2785,
-        "false_negative": 1029,
-        "precision": 0.2487,
-        "recall": 0.4726,
-        "f1": 0.3259
+        "true_positive": 902,
+        "false_positive": 2728,
+        "precision": 0.249,
+        "recall": 0.462,
+        "f1": 0.323
       }
-    },
-    "loss": 0.8658
+    }
   },
-  "checkpoint_file": "C:\\Ngoding\\xau_deep_sniper\\checkpoints\\best_moment_pretrained_lora.pt"
+  "checkpoint_file": "c:\\Ngoding\\xau_deep_sniper\\checkpoints\\best_moment_pretrained_lora.pt"
 }

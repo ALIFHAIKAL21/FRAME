@@ -68,13 +68,19 @@ FEATURE_CHANNELS: Dict[int, str] = {
     2: "ohlc_norm_low",       # Channel 3: Low normalized
     3: "ohlc_norm_close",     # Channel 4: Close normalized
     4: "volume_zscore",       # Channel 5: Volume dynamic Z-score
-    5: "smi",                 # Channel 6: Stochastic Momentum Index
-    6: "ma_ribbon_slope",     # Channel 7: MA Ribbon slope/differential
-    7: "liquidity_distance",  # Channel 8: Distance to nearest liquidity pool
-    8: "fvg_status",          # Channel 9: FVG/Order Block status
+    5: "sma_cross_spread",    # Channel 6: MA Cross (SMA 9 x SMA 21 spread / ATR)
+    6: "smi_val",             # Channel 7: Stochastic Momentum Index (10, 3, 3, 10) in [-1, 1]
+    7: "smi_signal_hist",     # Channel 8: SMI Signal Line Difference / Momentum
+    8: "smi_reversal_zone",   # Channel 9: SMI +/-40 Reversal Signal (+1 OS bull, -1 OB bear)
+    9: "order_block_zone",    # Channel 10: Supply / Demand Order Block (+1 Demand, -1 Supply)
+    10: "liquidity_sweep",    # Channel 11: Liquidity Sweeps (+1 SSL sweep, -1 BSL sweep)
+    11: "valuation_regime",   # Channel 12: Premium/Discount Valuation & Sideways Regime
+    12: "h4_macro_trend_velocity",        # Channel 13: H4 Macro Trend Velocity ([-1, 1])
+    13: "h4_market_structure",            # Channel 14: H4 Structural Bull/Bear Status ([-1, 1])
+    14: "momentum_expansion_persistence", # Channel 15: Macro Momentum & Expansion Persistence ([-1, 1])
 }
 
-NUM_CHANNELS: int = len(FEATURE_CHANNELS)  # = 9
+NUM_CHANNELS: int = len(FEATURE_CHANNELS)  # = 15
 
 # =============================================================================
 # 8. TEMPORAL SPLIT PARAMETERS (spec BAB 6.1)

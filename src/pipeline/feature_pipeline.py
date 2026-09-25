@@ -25,6 +25,7 @@ from . import feature_config as fcfg
 from .features_core import build_core_features, validate_core_features, get_warmup_period
 from .features_technical import build_technical_features
 from .features_structural import build_structural_features
+from .features_macro import build_macro_features
 from .dst_harmonizer import add_session_labels
 
 
@@ -61,6 +62,11 @@ def build_all_features(df: pd.DataFrame, verbose: bool = True) -> pd.DataFrame:
     if verbose:
         print(f"  [Ch 8-9] Liquidity Distance + FVG Status...")
     df = build_structural_features(df)
+    
+    # Channel 12-14: H4 Macro Multi-Timeframe features (Strictly Causal)
+    if verbose:
+        print(f"  [Ch 12-14] H4 Macro Velocity + Market Structure + Momentum Expansion...")
+    df = build_macro_features(df)
     
     # Session labels
     if "timestamp_utc" in df.columns and "session" not in df.columns:
@@ -181,26 +187,11 @@ def validate_all_features(df: pd.DataFrame, verbose: bool = True) -> Dict:
     """
     report = validate_core_features(df)
     
-    # Validate technical features
+    # Validate all 12 feature channels
     warmup = get_warmup_period()
-    for ch in ["smi", "ma_ribbon_slope"]:
-        if ch not in df.columns:
-            report[ch] = {"status": "MISSING"}
+    for ch_idx, ch in fcfg.FEATURE_CHANNELS.items():
+        if ch in report:
             continue
-        data = df[ch].iloc[warmup:].dropna()
-        report[ch] = {
-            "count": len(data),
-            "mean": round(float(data.mean()), 4),
-            "std": round(float(data.std()), 4),
-            "min": round(float(data.min()), 4),
-            "max": round(float(data.max()), 4),
-            "inf_count": int(np.isinf(data).sum()),
-            "status": "PASS" if not np.isinf(data).any() else "FAIL",
-            "issues": ["INF_VALUES"] if np.isinf(data).any() else [],
-        }
-    
-    # Validate structural features
-    for ch in ["liquidity_distance", "fvg_status"]:
         if ch not in df.columns:
             report[ch] = {"status": "MISSING"}
             continue

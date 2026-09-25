@@ -1,0 +1,84 @@
+{
+  "engine": "MOMENT-15ch Institutional Sniper Simulator",
+  "model_checkpoint": "checkpoints/best_moment_15ch_lora.pt",
+  "period": "2026-01-01 to 2026-08-31",
+  "timeframe": "XAU/USD M30",
+  "initial_capital_usd": 1000.0,
+  "final_capital_usd": 5756.44,
+  "net_pnl_usd": 4756.44,
+  "return_pct": 475.64,
+  "total_trades": 709,
+  "trades_per_day": 4.15,
+  "days_with_4_5_trades": 133,
+  "pct_days_with_4_5_trades": 78.7,
+  "win_rate_pct": 59.66,
+  "profit_factor": 1.36,
+  "max_drawdown_pct": 58.05,
+  "expectancy_usd": 6.71,
+  "monthly_performance": [
+    {
+      "month": "2026-01",
+      "trades": 84,
+      "wins": 43,
+      "win_rate": 51.2,
+      "pnl": -4.28,
+      "balance": 995.72
+    },
+    {
+      "month": "2026-02",
+      "trades": 90,
+      "wins": 60,
+      "win_rate": 66.7,
+      "pnl": 1624.34,
+      "balance": 2620.06
+    },
+    {
+      "month": "2026-03",
+      "trades": 91,
+      "wins": 60,
+      "win_rate": 65.9,
+      "pnl": 1162.8,
+      "balance": 3782.86
+    },
+    {
+      "month": "2026-04",
+      "trades": 89,
+      "wins": 51,
+      "win_rate": 57.3,
+      "pnl": 402.51,
+      "balance": 4185.37
+    },
+    {
+      "month": "2026-05",
+      "trades": 81,
+      "wins": 44,
+      "win_rate": 54.3,
+      "pnl": 68.91,
+      "balance": 4254.28
+    },
+    {
+      "month": "2026-06",
+      "trades": 84,
+      "wins": 47,
+      "win_rate": 56.0,
+      "pnl": 284.95,
+      "balance": 4539.23
+    },
+    {
+      "month": "2026-07",
+      "trades": 98,
+      "wins": 65,
+      "win_rate": 66.3,
+      "pnl": 921.28,
+      "balance": 5460.51
+    },
+    {
+      "month": "2026-08",
+      "trades": 92,
+      "wins": 53,
+      "win_rate": 57.6,
+      "pnl": 295.93,
+      "balance": 5756.44
+    }
+  ]
+}

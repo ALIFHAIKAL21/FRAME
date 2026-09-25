@@ -1,0 +1,115 @@
+{
+    "target_year": 2024,
+    "initial_capital": 500.0,
+    "lot_size": 0.01,
+    "final_equity": 2684.5,
+    "net_profit": 2184.5,
+    "return_pct": 436.9,
+    "total_trades": 1049,
+    "wins": 669,
+    "losses": 380,
+    "win_rate_pct": 63.78,
+    "profit_factor": 2.13,
+    "max_drawdown_pct": 5.67,
+    "min_equity": 500.0,
+    "avg_trades_per_day": 4.05,
+    "pct_days_4_to_5_trades": 77.6,
+    "monthly_summary": [
+        {
+            "month": "2024-01",
+            "trades": 92,
+            "wins": 62,
+            "win_rate": 67.4,
+            "pnl": 147.0,
+            "balance": 647.0
+        },
+        {
+            "month": "2024-02",
+            "trades": 85,
+            "wins": 51,
+            "win_rate": 60.0,
+            "pnl": 91.93,
+            "balance": 738.93
+        },
+        {
+            "month": "2024-03",
+            "trades": 69,
+            "wins": 41,
+            "win_rate": 59.4,
+            "pnl": 74.04,
+            "balance": 812.97
+        },
+        {
+            "month": "2024-04",
+            "trades": 91,
+            "wins": 64,
+            "win_rate": 70.3,
+            "pnl": 332.92,
+            "balance": 1145.89
+        },
+        {
+            "month": "2024-05",
+            "trades": 93,
+            "wins": 59,
+            "win_rate": 63.4,
+            "pnl": 209.68,
+            "balance": 1355.57
+        },
+        {
+            "month": "2024-06",
+            "trades": 85,
+            "wins": 52,
+            "win_rate": 61.2,
+            "pnl": 112.18,
+            "balance": 1467.75
+        },
+        {
+            "month": "2024-07",
+            "trades": 83,
+            "wins": 52,
+            "win_rate": 62.7,
+            "pnl": 148.92,
+            "balance": 1616.67
+        },
+        {
+            "month": "2024-08",
+            "trades": 89,
+            "wins": 59,
+            "win_rate": 66.3,
+            "pnl": 281.92,
+            "balance": 1898.59
+        },
+        {
+            "month": "2024-09",
+            "trades": 88,
+            "wins": 58,
+            "win_rate": 65.9,
+            "pnl": 222.46,
+            "balance": 2121.05
+        },
+        {
+            "month": "2024-10",
+            "trades": 97,
+            "wins": 57,
+            "win_rate": 58.8,
+            "pnl": 97.33,
+            "balance": 2218.38
+        },
+        {
+            "month": "2024-11",
+            "trades": 87,
+            "wins": 57,
+            "win_rate": 65.5,
+            "pnl": 303.19,
+            "balance": 2521.57
+        },
+        {
+            "month": "2024-12",
+            "trades": 90,
+            "wins": 57,
+            "win_rate": 63.3,
+            "pnl": 162.93,
+            "balance": 2684.5
+        }
+    ]
+}

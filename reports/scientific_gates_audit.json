@@ -1,0 +1,54 @@
+{
+  "gate_1": {
+    "gate_id": 1,
+    "gate_name": "Out-of-Sample Performance (Konvergensi & Sharpe)",
+    "passed": "False",
+    "criteria": {
+      "min_sharpe_ratio": 1.4,
+      "val_convergence_required": true
+    },
+    "actual_values": {
+      "sharpe_ratio": -0.1196,
+      "sharpe_passed": "False",
+      "val_convergence_stable": true
+    },
+    "verdict": "FAIL: Sharpe=-0.1196 (req >=1.4) ✗ | Convergence ✓"
+  },
+  "gate_2": {
+    "gate_id": 2,
+    "gate_name": "Resolusi Bot Malas & Monte Carlo Stress Test",
+    "passed": false,
+    "criteria": {
+      "min_non_hold_precision": 0.55,
+      "max_mc_p95_drawdown": -0.18
+    },
+    "actual_values": {
+      "non_hold_precision": 0.25,
+      "precision_passed": false,
+      "mc_p95_drawdown": -0.012,
+      "mc_passed": true,
+      "mc_iterations": 1000
+    },
+    "verdict": "FAIL: Precision=25.0% (req >=55.00000000000001%) ✗ | MC P95 DD=-1.20% (req >=-18.0%) ✓"
+  },
+  "gate_3": {
+    "gate_id": 3,
+    "gate_name": "Expectancy Pasca-Biaya Bersih & Realistis",
+    "passed": false,
+    "criteria": {
+      "min_net_profit_factor": 1.35,
+      "max_circuit_breaker_trips": 0
+    },
+    "actual_values": {
+      "net_profit_factor": 0.9013,
+      "npf_passed": false,
+      "circuit_breaker_trips": 0,
+      "cb_clean": true,
+      "total_friction_usd": 9.69,
+      "net_pnl_usd": -30.08
+    },
+    "verdict": "FAIL: Net PF=0.9013 (req >=1.35) ✗ | CB Trips=0 (req ==0) ✓"
+  },
+  "all_gates_passed": "False",
+  "system_verdict": "SYSTEM REJECTED: 3/3 gate GAGAL — Gate 1 (Sharpe/Convergence), Gate 2 (Precision/Monte Carlo), Gate 3 (Net PF/Circuit Breaker). Model BELUM memenuhi standar institusional. Diperlukan iterasi penelitian tambahan."
+}

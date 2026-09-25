@@ -1,0 +1,22 @@
+{
+  "initial_equity": 10000.0,
+  "final_equity": 9969.920000000004,
+  "total_trades": 12,
+  "winning_trades": 3,
+  "losing_trades": 9,
+  "win_rate": 0.25,
+  "net_pnl": -30.08,
+  "net_profit_factor": 0.9013,
+  "sharpe_ratio": -0.1196,
+  "sortino_ratio": -0.1857,
+  "max_drawdown_pct": -0.027,
+  "max_drawdown_usd": -271.59,
+  "avg_r_multiple": -0.0357,
+  "expectancy_r": -0.0357,
+  "total_friction": 9.69,
+  "circuit_breaker_trips": 0,
+  "confidence_tau": 0.23,
+  "spread_pip": 0.75,
+  "slippage_pip": 0.3,
+  "commission_per_lot": 3.5
+}

@@ -1,0 +1,165 @@
+{
+    "target_years": "2021-2022",
+    "initial_capital": 500.0,
+    "lot_size": 0.01,
+    "final_equity": 2844.33,
+    "net_profit": 2344.33,
+    "return_pct": 468.87,
+    "total_trades": 1333,
+    "wins": 897,
+    "losses": 436,
+    "win_rate_pct": 67.29,
+    "profit_factor": 2.31,
+    "max_drawdown_pct": 4.34,
+    "min_equity": 500.0,
+    "avg_trades_per_day": 4.09,
+    "pct_days_4_to_5_trades": 79.8,
+    "year_summary": [
+        {
+            "year": "2021",
+            "trades": 278,
+            "wins": 179,
+            "losses": 99,
+            "win_rate": 64.39,
+            "pnl": 385.1
+        },
+        {
+            "year": "2022",
+            "trades": 1055,
+            "wins": 718,
+            "losses": 337,
+            "win_rate": 68.06,
+            "pnl": 1959.23
+        }
+    ],
+    "monthly_summary": [
+        {
+            "month": "2021-09",
+            "trades": 4,
+            "wins": 3,
+            "win_rate": 75.0,
+            "pnl": 16.15,
+            "balance": 516.15
+        },
+        {
+            "month": "2021-10",
+            "trades": 90,
+            "wins": 61,
+            "win_rate": 67.8,
+            "pnl": 166.32,
+            "balance": 682.47
+        },
+        {
+            "month": "2021-11",
+            "trades": 87,
+            "wins": 56,
+            "win_rate": 64.4,
+            "pnl": 127.3,
+            "balance": 809.77
+        },
+        {
+            "month": "2021-12",
+            "trades": 97,
+            "wins": 59,
+            "win_rate": 60.8,
+            "pnl": 75.33,
+            "balance": 885.1
+        },
+        {
+            "month": "2022-01",
+            "trades": 81,
+            "wins": 52,
+            "win_rate": 64.2,
+            "pnl": 61.76,
+            "balance": 946.86
+        },
+        {
+            "month": "2022-02",
+            "trades": 86,
+            "wins": 60,
+            "win_rate": 69.8,
+            "pnl": 192.01,
+            "balance": 1138.87
+        },
+        {
+            "month": "2022-03",
+            "trades": 90,
+            "wins": 63,
+            "win_rate": 70.0,
+            "pnl": 275.28,
+            "balance": 1414.15
+        },
+        {
+            "month": "2022-04",
+            "trades": 85,
+            "wins": 55,
+            "win_rate": 64.7,
+            "pnl": 103.99,
+            "balance": 1518.14
+        },
+        {
+            "month": "2022-05",
+            "trades": 97,
+            "wins": 68,
+            "win_rate": 70.1,
+            "pnl": 225.44,
+            "balance": 1743.58
+        },
+        {
+            "month": "2022-06",
+            "trades": 96,
+            "wins": 65,
+            "win_rate": 67.7,
+            "pnl": 161.32,
+            "balance": 1904.9
+        },
+        {
+            "month": "2022-07",
+            "trades": 84,
+            "wins": 61,
+            "win_rate": 72.6,
+            "pnl": 182.3,
+            "balance": 2087.2
+        },
+        {
+            "month": "2022-08",
+            "trades": 93,
+            "wins": 69,
+            "win_rate": 74.2,
+            "pnl": 203.2,
+            "balance": 2290.4
+        },
+        {
+            "month": "2022-09",
+            "trades": 92,
+            "wins": 60,
+            "win_rate": 65.2,
+            "pnl": 168.93,
+            "balance": 2459.33
+        },
+        {
+            "month": "2022-10",
+            "trades": 85,
+            "wins": 51,
+            "win_rate": 60.0,
+            "pnl": 81.01,
+            "balance": 2540.34
+        },
+        {
+            "month": "2022-11",
+            "trades": 84,
+            "wins": 53,
+            "win_rate": 63.1,
+            "pnl": 140.1,
+            "balance": 2680.44
+        },
+        {
+            "month": "2022-12",
+            "trades": 82,
+            "wins": 61,
+            "win_rate": 74.4,
+            "pnl": 163.89,
+            "balance": 2844.33
+        }
+    ]
+}

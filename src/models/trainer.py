@@ -1,13 +1,14 @@
 """
-XAU_DEEP_SNIPER - MOMENT PyTorch Training and Evaluation Engine (TAHAP 4)
-========================================================================
+XAU_DEEP_SNIPER - High-Performance PyTorch Training & Evaluation Engine (TAHAP 4)
+==================================================================================
 Mendukung:
 - FP16 Automatic Mixed Precision (AMP) via torch.amp.autocast dan GradScaler
-- Gradient Accumulation untuk stabilitas batch besar pada GPU 6GB VRAM
+- cuDNN Auto-Benchmark (torch.backends.cudnn.benchmark = True)
+- Institutional Early Stopping dengan metric Composite Score
 - Linear Warmup + Cosine Annealing Learning Rate Scheduler
 - Perhitungan metrik kuantitatif trading: Macro F1, Non-HOLD Signal Precision,
   Directional Accuracy, dan Breakdown per-kelas
-- Checkpointing model terbaik berdasarkan Validation Performance
+- Checkpointing model terbaik
 """
 
 import time
@@ -97,15 +98,15 @@ def compute_classification_metrics(y_true: np.ndarray, y_pred: np.ndarray, num_c
 
 class MOMENTTrainer:
     """
-    Institutional-Grade Training and Evaluation Engine untuk MOMENT Classifier
-    dengan CUDA Mixed Precision (AMP FP16) and Cosine Annealing with Warmup.
+    High-Performance Institutional Training and Evaluation Engine untuk MOMENT Classifier
+    dengan CUDA Mixed Precision (AMP FP16), Early Stopping, and cuDNN Benchmarking.
     """
 
     def __init__(
         self,
         model: nn.Module,
         criterion: ClassBalancedFocalLoss,
-        learning_rate: float = 2e-4,
+        learning_rate: float = 2.5e-4,
         weight_decay: float = 0.01,
         max_grad_norm: float = 1.0,
         accumulation_steps: int = 1,
@@ -118,6 +119,9 @@ class MOMENTTrainer:
         self.max_grad_norm = max_grad_norm
         self.accumulation_steps = max(1, accumulation_steps)
         self.use_amp = use_amp and (self.device == "cuda")
+
+        if self.device == "cuda":
+            torch.backends.cudnn.benchmark = True
 
         # Filter parameter trainable (LoRA adapters + classification head)
         trainable_params = [p for p in self.model.parameters() if p.requires_grad]
@@ -139,12 +143,15 @@ class MOMENTTrainer:
         total_loss = 0.0
         all_preds = []
         all_targets = []
+        total_samples = 0
 
         self.optimizer.zero_grad()
 
         for step, (x_batch, y_batch) in enumerate(train_loader):
             x_batch = x_batch.to(self.device, non_blocking=True)
             y_batch = y_batch.to(self.device, non_blocking=True)
+            bs = len(y_batch)
+            total_samples += bs
 
             with torch.amp.autocast(device_type="cuda", dtype=torch.float16, enabled=self.use_amp):
                 logits = self.model(x_batch)
@@ -168,12 +175,12 @@ class MOMENTTrainer:
                 if self.scheduler is not None:
                     self.scheduler.step()
 
-            total_loss += raw_loss.item() * len(y_batch)
+            total_loss += raw_loss.item() * bs
             preds = torch.argmax(logits, dim=-1)
             all_preds.extend(preds.detach().cpu().numpy())
             all_targets.extend(y_batch.detach().cpu().numpy())
 
-        avg_loss = total_loss / len(train_loader.dataset)
+        avg_loss = total_loss / total_samples
         metrics = compute_classification_metrics(np.array(all_targets), np.array(all_preds))
         metrics["loss"] = round(avg_loss, 4)
         return metrics
@@ -185,21 +192,24 @@ class MOMENTTrainer:
         total_loss = 0.0
         all_preds = []
         all_targets = []
+        total_samples = 0
 
         for x_batch, y_batch in eval_loader:
             x_batch = x_batch.to(self.device, non_blocking=True)
             y_batch = y_batch.to(self.device, non_blocking=True)
+            bs = len(y_batch)
+            total_samples += bs
 
             with torch.amp.autocast(device_type="cuda", dtype=torch.float16, enabled=self.use_amp):
                 logits = self.model(x_batch)
                 loss = self.criterion(logits, y_batch)
 
-            total_loss += loss.item() * len(y_batch)
+            total_loss += loss.item() * bs
             preds = torch.argmax(logits, dim=-1)
             all_preds.extend(preds.cpu().numpy())
             all_targets.extend(y_batch.cpu().numpy())
 
-        avg_loss = total_loss / len(eval_loader.dataset)
+        avg_loss = total_loss / total_samples
         metrics = compute_classification_metrics(np.array(all_targets), np.array(all_preds))
         metrics["loss"] = round(avg_loss, 4)
         return metrics
@@ -210,18 +220,18 @@ class MOMENTTrainer:
         val_loader: torch.utils.data.DataLoader,
         epochs: int = 12,
         warmup_epochs: int = 1,
+        patience: int = 3,
         checkpoint_dir: str = "checkpoints",
-        checkpoint_name: str = "best_moment_pretrained_lora.pt",
+        checkpoint_name: str = "best_moment_15ch_lora.pt",
         verbose: bool = True,
     ) -> Dict[str, Any]:
         """
-        Menjalankan full training loop dengan Warmup + Cosine Annealing scheduler.
+        Menjalankan full training loop dengan Warmup + Cosine Annealing dan Early Stopping.
         """
         chk_path = pathlib.Path(checkpoint_dir)
         chk_path.mkdir(parents=True, exist_ok=True)
         best_checkpoint_file = chk_path / checkpoint_name
 
-        # Hitung total optim step untuk Cosine Annealing with Warmup
         steps_per_epoch = math.ceil(len(train_loader) / self.accumulation_steps)
         total_training_steps = steps_per_epoch * epochs
         warmup_steps = steps_per_epoch * max(1, warmup_epochs)
@@ -252,11 +262,14 @@ class MOMENTTrainer:
         }
 
         best_val_f1 = -1.0
+        best_composite_score = -1.0
+        patience_counter = 0
 
         if verbose:
-            print(f"[TRAINER] Institutional MOMENT Fine-Tuning ({epochs} epochs on {self.device}):")
+            print(f"[TRAINER] High-Speed MOMENT Fine-Tuning ({epochs} max epochs on {self.device}):")
             print(f"  AMP FP16 Enabled     : {self.use_amp}")
-            print(f"  Gradient Accumulation: {self.accumulation_steps} (Effective batch x{self.accumulation_steps})")
+            print(f"  Batch Size (Loader)  : {train_loader.batch_size} (Gradient Accum: {self.accumulation_steps})")
+            print(f"  Early Stopping       : Active (Patience = {patience} epochs)")
             summary = self.model.parameter_summary() if hasattr(self.model, "parameter_summary") else {}
             if summary:
                 print(f"  Model Type           : {summary.get('model_type', 'MOMENT')}")
@@ -267,6 +280,8 @@ class MOMENTTrainer:
             train_metrics = self.train_epoch(train_loader)
             val_metrics = self.evaluate(val_loader)
             t1 = time.time()
+            epoch_duration = t1 - t0
+            throughput = len(train_loader.dataset) / epoch_duration
 
             history["epoch"].append(epoch)
             history["train_loss"].append(train_metrics["loss"])
@@ -281,31 +296,56 @@ class MOMENTTrainer:
             if verbose:
                 vram_str = f"{torch.cuda.memory_allocated() / (1024*1024):.0f}MB" if self.device == "cuda" else "N/A"
                 print(
-                    f"  Epoch {epoch:2d}/{epochs:2d} ({t1 - t0:.1f}s, VRAM: {vram_str}) | "
+                    f"  Epoch {epoch:2d}/{epochs:2d} ({epoch_duration:.1f}s, {throughput:.0f} spl/s, VRAM: {vram_str}) | "
                     f"Train Loss: {train_metrics['loss']:.4f} Acc: {train_metrics['accuracy']:.3f} | "
                     f"Val Loss: {val_metrics['loss']:.4f} Acc: {val_metrics['accuracy']:.3f} "
                     f"F1: {val_metrics['macro_f1']:.3f} | "
                     f"Signal Prec: {val_metrics['non_hold_precision']*100:.1f}% DirAcc: {val_metrics['directional_accuracy']*100:.1f}% | LR: {current_lr:.2e}"
                 )
 
-            # Simpan model terbaik berdasarkan validation Macro F1
-            if val_metrics["macro_f1"] > best_val_f1:
-                best_val_f1 = val_metrics["macro_f1"]
+            total_signals = val_metrics["non_hold_signals"]
+            min_signals = 500
+            dir_acc = val_metrics["directional_accuracy"]
+            signal_prec = val_metrics["non_hold_precision"]
+            f1 = val_metrics["macro_f1"]
+
+            if total_signals >= min_signals:
+                composite_score = (signal_prec * 0.4 + dir_acc * 0.4 + f1 * 0.2)
+            else:
+                composite_score = 0.0
+
+            is_best = (composite_score > best_composite_score and composite_score > 0.0)
+            if is_best:
+                best_composite_score = composite_score
+                best_val_f1 = max(best_val_f1, f1)
+                patience_counter = 0
                 torch.save(
                     {
                         "epoch": epoch,
                         "model_state_dict": self.model.state_dict(),
                         "optimizer_state_dict": self.optimizer.state_dict(),
                         "val_metrics": val_metrics,
+                        "composite_score": composite_score,
                         "config": getattr(self.model, "config", None),
                     },
                     best_checkpoint_file,
                 )
                 if verbose:
-                    print(f"    >>> Best Checkpoint Saved! (Val Macro F1 = {best_val_f1:.4f}, Signal Prec = {val_metrics['non_hold_precision']*100:.1f}%)")
+                    print(
+                        f"    >>> BEST CHECKPOINT SAVED! (Score: {composite_score:.4f}, "
+                        f"Val F1: {f1:.4f}, DirAcc: {dir_acc*100:.1f}%, "
+                        f"Signal Prec: {val_metrics['non_hold_precision']*100:.1f}%)"
+                    )
+            else:
+                patience_counter += 1
+                if patience > 0 and patience_counter >= patience and epoch >= (warmup_epochs + 2):
+                    if verbose:
+                        print(f"    >>> EARLY STOPPING TRIGGERED! (No improvement for {patience} consecutive epochs).")
+                    break
 
         return {
             "history": history,
             "best_val_f1": best_val_f1,
+            "best_composite_score": best_composite_score,
             "checkpoint_path": str(best_checkpoint_file),
         }
