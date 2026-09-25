@@ -13,7 +13,7 @@ try:
     from PySide6.QtWidgets import (
         QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
         QLabel, QPushButton, QComboBox, QSplitter, QFrame, QDoubleSpinBox, 
-        QMessageBox, QSystemTrayIcon, QMenu, QDialog
+        QMessageBox, QSystemTrayIcon, QMenu, QDialog, QLineEdit
     )
     from PySide6.QtCore import Qt, QTimer, QLocale
     from PySide6.QtGui import QFont, QColor, QAction, QIcon, QPixmap, QPainter, QBrush, QPen
@@ -21,7 +21,7 @@ except ImportError:
     from PyQt6.QtWidgets import (
         QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
         QLabel, QPushButton, QComboBox, QSplitter, QFrame, QDoubleSpinBox, 
-        QMessageBox, QSystemTrayIcon, QMenu, QDialog
+        QMessageBox, QSystemTrayIcon, QMenu, QDialog, QLineEdit
     )
     from PyQt6.QtCore import Qt, QTimer, QLocale
     from PyQt6.QtGui import QFont, QColor, QAction, QIcon, QPixmap, QPainter, QBrush, QPen
