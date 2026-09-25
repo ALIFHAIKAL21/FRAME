@@ -46,3 +46,7 @@ data/processed/*.h5
 .idea/
 .DS_Store
 Thumbs.db
+
+*.db
+*.db-journal
+logs/

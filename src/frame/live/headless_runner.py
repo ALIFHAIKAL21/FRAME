@@ -1,0 +1,151 @@
+"""
+FLOWDEV FRAME - Headless 24/7 Live Paper Trader Runner
+Runs continuously in background / VPS / Cloud Server without needing a desktop display.
+Monitors XAU/USD M30 ticks, executes LoRA PyTorch inference on candle completion,
+drives 4-stage Kinetic OMS, updates state JSON, and sends alerts to Telegram.
+"""
+
+import sys, pathlib, time, signal, json
+from datetime import datetime, timezone
+
+try:
+    from PySide6.QtCore import QCoreApplication, QTimer
+except ImportError:
+    from PyQt6.QtCore import QCoreApplication, QTimer
+
+from src.frame.banner import print_frame_banner
+from .paper_broker import LivePaperBroker
+from .feed import LiveMarketFeed
+from .agent import LiveAgent
+from .telegram_bot import LiveTelegramNotifier
+
+class HeadlessLiveTrader:
+    def __init__(self, initial_capital: float = 500.0, lot_mode: str = "dynamic", max_lot: float = 2.0):
+        self.app = QCoreApplication.instance() or QCoreApplication(sys.argv)
+        
+        # Engines
+        self.broker = LivePaperBroker(initial_capital=initial_capital, lot_mode=lot_mode, max_lot=max_lot)
+        self.feed = LiveMarketFeed(symbol="XAUUSD", poll_interval_ms=250)
+        self.agent = LiveAgent(broker=self.broker)
+        self.telegram = LiveTelegramNotifier()
+
+        # State output
+        self.state_file = pathlib.Path(r"c:\Ngoding\xau_deep_sniper\logs\live_trader_state.json")
+        self.state_file.parent.mkdir(parents=True, exist_ok=True)
+
+        self._wire_signals()
+
+        # Periodic status logger (every 30 seconds)
+        self.log_timer = QTimer()
+        self.log_timer.timeout.connect(self._log_heartbeat)
+        self.log_timer.start(30000)
+
+    def _wire_signals(self):
+        # Feed -> Agent & Broker
+        self.feed.tick_received.connect(self.agent.on_tick)
+        self.feed.candle_updated.connect(self._on_candle_updated)
+        self.feed.connection_changed.connect(self._on_connection_changed)
+
+        # Agent -> Events
+        self.agent.order_opened.connect(self._on_order_opened)
+        self.agent.order_closed.connect(self._on_order_closed)
+        self.agent.oms_event.connect(self._on_oms_event)
+        self.agent.telemetry_updated.connect(self._on_telemetry)
+
+    def _on_connection_changed(self, connected: bool, source: str, msg: str):
+        status_tag = "[CONNECTED]" if connected else "[DISCONNECTED]"
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] {status_tag} Feed Source: {source} | {msg}")
+
+    def _on_candle_updated(self, candle: dict):
+        self.agent.on_candle_closed(candle, self.feed.get_recent_candles() if hasattr(self.feed, 'get_recent_candles') else [])
+
+    def _on_order_opened(self, pos: dict):
+        d = pos.get('direction')
+        ep = pos.get('entry_price')
+        lot = pos.get('lot')
+        sl = pos.get('current_sl')
+        tp = pos.get('current_tp')
+        print(f"\n>>> [EXECUTION] NEW ORDER: {d} {lot:.2f} Lot @ ${ep:.2f} | SL: ${sl:.2f} | TP: ${tp:.2f} (+2.7R) <<<")
+        self.telegram.notify_order_opened(pos, self.broker.cash)
+        self._save_state()
+
+    def _on_order_closed(self, trade: dict):
+        pnl = trade.get('net_pnl', 0.0)
+        reason = trade.get('exit_reason', 'Closed')
+        print(f"\n>>> [CLOSED] {trade.get('direction')} closed @ ${trade.get('exit_price', 0.0):.2f} | Net PnL: {'+' if pnl>=0 else ''}${pnl:.2f} ({reason}) <<<")
+        stats = self.broker.get_stats()
+        self.telegram.notify_order_closed(trade, stats)
+        self._save_state()
+
+    def _on_oms_event(self, stage: str, details: str, sl: float):
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] [KINETIC OMS] {stage}: {details} (New SL: ${sl:.2f})")
+        self.telegram.notify_oms_event(stage, details, sl)
+        self._save_state()
+
+    def _on_telemetry(self, tele: dict):
+        action = tele.get('action')
+        conf = tele.get('conf')
+        session = tele.get('session')
+        if action != "HOLD":
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] [AI TELEMETRY] Session: {session} | Signal: {action} ({conf:.1f}%)")
+
+    def _log_heartbeat(self):
+        stats = self.broker.get_stats()
+        pos = self.broker.open_position
+        now_str = datetime.now().strftime('%H:%M:%S')
+        if pos is not None:
+            fl_pnl = pos.get('floating_pnl', 0.0)
+            fl_r = pos.get('floating_r', 0.0)
+            print(f"[{now_str}] [HEARTBEAT] ACTIVE: {pos['direction']} {pos['lot']:.2f}L | Floating PnL: {'+' if fl_pnl>=0 else ''}${fl_pnl:.2f} ({fl_r:+.2f}R) | Balance: ${self.broker.cash:.2f}")
+        else:
+            print(f"[{now_str}] [HEARTBEAT] STANDBY HUNTING | Balance: ${self.broker.cash:.2f} | Trades: {stats['total_trades']} (WR: {stats['win_rate']:.1f}%)")
+        self._save_state()
+
+    def _save_state(self):
+        try:
+            stats = self.broker.get_stats()
+            state = {
+                "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+                "balance": self.broker.cash,
+                "equity": self.broker.get_equity(),
+                "initial_capital": self.broker.initial_capital,
+                "lot_mode": self.broker.lot_mode,
+                "open_position": self.broker.open_position,
+                "stats": stats,
+                "recent_trades": self.broker.trade_history[-10:]
+            }
+            with open(self.state_file, 'w') as f:
+                json.dump(state, f, indent=2, default=str)
+        except Exception:
+            pass
+
+    def run(self):
+        print_frame_banner()
+        print("  Architecture: 15-Channel MOMENT LoRA + 4-Stage Kinetic OMS")
+        print("  Mode        : Live Realtime Simulation (Zero Real Account Risk)")
+        print(f"  Device      : {self.agent.device} (GPU PyTorch Runtime)")
+        print(f"  Telegram    : {'Configured & Active' if self.telegram.is_active else 'Inactive (Optional: set TELEGRAM_BOT_TOKEN)'}")
+        print(f"  State File  : {self.state_file}")
+        print("==========================================================================")
+        print("  Engine started in 24/7 background mode. Press Ctrl+C to terminate.")
+        print("==========================================================================\n")
+
+        self.feed.start()
+        self.app.exec()
+
+    def stop(self):
+        print("\nStopping headless trader engine gracefully...")
+        self.feed.stop()
+        self.app.quit()
+
+def main():
+    trader = HeadlessLiveTrader(initial_capital=500.0, lot_mode="dynamic", max_lot=2.0)
+    
+    # Handle graceful exit
+    signal.signal(signal.SIGINT, lambda sig, frame: trader.stop())
+    signal.signal(signal.SIGTERM, lambda sig, frame: trader.stop())
+    
+    trader.run()
+
+if __name__ == "__main__":
+    main()
