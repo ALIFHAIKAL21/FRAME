@@ -109,10 +109,8 @@ class LiveTradingWindow(QMainWindow):
         self.cloud_sync_timer.timeout.connect(self._sync_with_cloud_server)
         self.cloud_sync_timer.start()
 
-        # Windows Background Keep-Alive & System Tray
-        self._enable_windows_keepalive()
+        # Standalone Desktop Cockpit
         self._init_ui()
-        self._init_system_tray()
         self._wire_signals()
         self._apply_role_permissions()
 
@@ -590,130 +588,16 @@ class LiveTradingWindow(QMainWindow):
         self.historical_win.raise_()
         self.historical_win.activateWindow()
 
-    def _enable_windows_keepalive(self):
-        try:
-            # ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_AWAYMODE_REQUIRED
-            ES_CONTINUOUS = 0x80000000
-            ES_SYSTEM_REQUIRED = 0x00000001
-            ES_AWAYMODE_REQUIRED = 0x00000040
-            ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_AWAYMODE_REQUIRED)
-        except Exception:
-            pass
-
-    def _disable_windows_keepalive(self):
-        try:
-            ES_CONTINUOUS = 0x80000000
-            ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS)
-        except Exception:
-            pass
-
-    def _create_tray_icon_pixmap(self) -> QIcon:
-        pm = QPixmap(64, 64)
-        pm.fill(Qt.transparent)
-        p = QPainter(pm)
-        p.setRenderHint(QPainter.Antialiasing)
-        p.setBrush(QColor("#090d14"))
-        p.setPen(QColor("#d4af37"))
-        p.drawRoundedRect(4, 4, 56, 56, 12, 12)
-
-        # Falcon F
-        font = QFont("Arial", 28, QFont.Bold)
-        p.setFont(font)
-        p.setPen(QColor("#d4af37"))
-        p.drawText(pm.rect(), Qt.AlignCenter, "F")
-
-        # Green pulse dot
-        p.setBrush(QColor("#00e676"))
-        p.setPen(Qt.NoPen)
-        p.drawEllipse(44, 44, 14, 14)
-        p.end()
-        return QIcon(pm)
-
-    def _init_system_tray(self):
-        if not QSystemTrayIcon.isSystemTrayAvailable():
-            self.tray_icon = None
-            return
-
-        icon = self._create_tray_icon_pixmap()
-        self.setWindowIcon(icon)
-
-        self.tray_icon = QSystemTrayIcon(icon, self)
-        self.tray_icon.setToolTip("FLOWDEV FRAME // Live Realtime Trader (Active Online)")
-
-        menu = QMenu()
-        menu.setStyleSheet("""
-            QMenu {
-                background-color: #0b0f19; border: 1px solid #1e293b;
-                color: #e2e8f0; font-family: sans-serif; font-size: 11px; padding: 4px;
-            }
-            QMenu::item { padding: 6px 16px; border-radius: 3px; }
-            QMenu::item:selected { background-color: #1e293b; color: #38bdf8; }
-            QMenu::separator { height: 1px; background-color: #1e293b; margin: 4px 6px; }
-        """)
-
-        act_show = menu.addAction("🖥️ Tampilkan Jendela Utama (Show Window)")
-        act_show.triggered.connect(self._restore_from_tray)
-
-        menu.addSeparator()
-
-        self.act_status = menu.addAction("🦅 Agent: ARMED & HUNTING")
-        self.act_status.setEnabled(False)
-
-        self.act_pos_info = menu.addAction("📊 Posisi: Standby (Belum Ada Order)")
-        self.act_pos_info.setEnabled(False)
-
-        menu.addSeparator()
-
-        act_pause = menu.addAction("⏸️ Pause / Resume Agent")
-        act_pause.triggered.connect(self._toggle_agent_armed)
-
-        act_panic = menu.addAction("⚡ Panic Close Active Position")
-        act_panic.triggered.connect(self._on_panic_close_requested)
-
-        menu.addSeparator()
-
-        act_backtest = menu.addAction("📈 Buka Backtest Workstation")
-        act_backtest.triggered.connect(self._open_historical_workstation)
-
-        menu.addSeparator()
-
-        act_quit = menu.addAction("🚪 Tutup Aplikasi Total (Exit Completely)")
-        act_quit.triggered.connect(self._force_quit)
-
-        self.tray_icon.setContextMenu(menu)
-        self.tray_icon.activated.connect(self._on_tray_activated)
-        self.tray_icon.show()
-
-    def _on_tray_activated(self, reason):
-        if reason in (QSystemTrayIcon.Trigger, QSystemTrayIcon.DoubleClick):
-            if self.isVisible():
-                self.hide()
-            else:
-                self._restore_from_tray()
-
-    def _restore_from_tray(self):
-        self.showNormal()
-        self.raise_()
-        self.activateWindow()
-
     def closeEvent(self, event):
-        if hasattr(self, "tray_icon") and self.tray_icon is not None and self.tray_icon.isVisible():
-            event.ignore()
-            self.hide()
-            self.tray_icon.showMessage(
-                "FLOWDEV FRAME // Tetap Online",
-                "Jendela desktop disembunyikan. Bot tetap berjalan di background secara realtime!",
-                QSystemTrayIcon.Information,
-                3000
-            )
-        else:
-            self._force_quit()
-
-    def _force_quit(self):
-        self._disable_windows_keepalive()
-        self.feed.stop()
-        if hasattr(self, "tray_icon") and self.tray_icon is not None:
-            self.tray_icon.hide()
+        """Clean institutional exit: stops threads, releases memory, and exits cleanly."""
+        try:
+            if hasattr(self, "cloud_sync_timer") and self.cloud_sync_timer.isActive():
+                self.cloud_sync_timer.stop()
+            if hasattr(self, "feed") and self.feed is not None:
+                self.feed.stop()
+        except Exception:
+            pass
+        event.accept()
         QApplication.quit()
 
     def _apply_role_permissions(self):
@@ -747,7 +631,7 @@ class LiveTradingWindow(QMainWindow):
             self.raise_()
             self.activateWindow()
         else:
-            self._force_quit()
+            QApplication.quit()
 
 def run_live_app():
     from src.frame.security.auth_dialog import DesktopAuthGatekeeper
