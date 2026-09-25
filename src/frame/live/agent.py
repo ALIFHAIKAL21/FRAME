@@ -13,7 +13,10 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 import numpy as np
 import pandas as pd
-import torch
+try:
+    import torch
+except ImportError:
+    torch = None
 
 try:
     from PySide6.QtCore import QObject, Signal
@@ -54,7 +57,7 @@ class LiveAgent(QObject):
         super().__init__(parent)
         self.broker = broker
         self.is_armed = True
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu") if torch is not None else "cpu"
         self.model = None
         self.last_evaluated_bar_time = 0
         self.last_session_traded = ""
@@ -63,9 +66,13 @@ class LiveAgent(QObject):
         self._load_model()
 
     def _load_model(self):
+        if torch is None:
+            self.model = None
+            return
         try:
-            ckpt_path = pathlib.Path(r"c:\Ngoding\xau_deep_sniper\checkpoints\best_moment_15ch_lora.pt")
-            model_code_path = pathlib.Path(r"c:\Ngoding\xau_deep_sniper\src\models\moment_model.py")
+            repo_root = pathlib.Path(__file__).resolve().parent.parent.parent.parent
+            ckpt_path = repo_root / "checkpoints" / "best_moment_15ch_lora.pt"
+            model_code_path = repo_root / "src" / "models" / "moment_model.py"
             if ckpt_path.exists() and model_code_path.exists():
                 import importlib.util, sys
                 spec = importlib.util.spec_from_file_location("src.models.moment_model", model_code_path)
