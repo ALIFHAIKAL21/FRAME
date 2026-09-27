@@ -190,6 +190,9 @@ class LiveTradingWindow(QMainWindow):
         self._wire_signals()
         self._apply_role_permissions()
 
+        # Load persisted session state (Auto-Recovery of open trade, balance, symbol, armed status)
+        self._load_persisted_state()
+
         # Start live market feed
         self.feed.start()
 
@@ -589,6 +592,9 @@ class LiveTradingWindow(QMainWindow):
         except Exception as e:
             print(f"[DB Order Error] {e}")
 
+        # 5. Persist state to disk immediately
+        self._persist_current_state()
+
         # 5. Tray Notification
         if hasattr(self, "tray_icon") and self.tray_icon is not None and self.tray_icon.isVisible():
             try:
@@ -611,6 +617,9 @@ class LiveTradingWindow(QMainWindow):
 
         # Record into Unified Audit Database
         self.db.record_order_closed(trade)
+
+        # Persist closed state to disk immediately
+        self._persist_current_state()
 
         if hasattr(self, "tray_icon") and self.tray_icon is not None and self.tray_icon.isVisible():
             self.act_pos_info.setText("📊 Posisi: Standby (Belum Ada Order)")
@@ -641,6 +650,9 @@ class LiveTradingWindow(QMainWindow):
         # Record into Unified Audit Database
         trade_id = self.broker.open_position.get("id", "") if self.broker.open_position else ""
         self.db.record_oms_event(trade_id, stage, details, ref_price)
+
+        # Persist updated OMS SL to disk immediately
+        self._persist_current_state()
 
         if hasattr(self, "tray_icon") and self.tray_icon is not None and self.tray_icon.isVisible():
             self.tray_icon.showMessage(
@@ -753,6 +765,7 @@ class LiveTradingWindow(QMainWindow):
         new_state = not self.agent.is_armed
         self.agent.set_armed(new_state)
         self._update_agent_button_text()
+        self._persist_current_state()
         if hasattr(self, "cloud_client") and self.cloud_client:
             threading.Thread(target=lambda: self.cloud_client.toggle_agent(new_state), daemon=True).start()
 
@@ -777,6 +790,7 @@ class LiveTradingWindow(QMainWindow):
         self.broker.reset(new_capital=val)
         self.metrics_panel.update_metrics(self.broker.get_stats())
         self.journal_widget._log_event(f"[ACCOUNT] Reset simulated capital to ${val:,.2f} USD")
+        self._persist_current_state()
 
     def _reset_account_dialog(self):
         ret = QMessageBox.question(
@@ -792,6 +806,7 @@ class LiveTradingWindow(QMainWindow):
             self.journal_widget.tbl_trades.setRowCount(0)
             self.metrics_panel.update_metrics(self.broker.get_stats())
             self.journal_widget._log_event(f"[ACCOUNT] Full paper account reset to ${cap:,.2f} USD")
+            self._persist_current_state()
             if hasattr(self, "cloud_client") and self.cloud_client:
                 threading.Thread(target=lambda: self.cloud_client.reset(cap), daemon=True).start()
 
@@ -807,9 +822,117 @@ class LiveTradingWindow(QMainWindow):
         self.historical_win.raise_()
         self.historical_win.activateWindow()
 
+    def _persist_current_state(self):
+        """Saves current desktop operational state to data/cloud_trader_state.json."""
+        try:
+            state_file = pathlib.Path(r"c:\Ngoding\xau_deep_sniper\data\cloud_trader_state.json")
+            state_file.parent.mkdir(parents=True, exist_ok=True)
+            state_data = {
+                "cash": float(self.broker.cash),
+                "open_position": self.broker.open_position,
+                "last_candle_time": getattr(self.agent, "last_evaluated_bar_time", 0),
+                "last_session_traded": getattr(self.agent, "last_session_traded", ""),
+                "is_armed": bool(self.agent.is_armed),
+                "symbol": getattr(self, "current_symbol", "BTCUSD"),
+                "lot_mode": getattr(self.broker, "lot_mode", "dynamic"),
+                "max_lot": getattr(self.broker, "max_lot", 2.0),
+                "updated_at_utc": datetime.now(timezone.utc).isoformat()
+            }
+            with open(state_file, "w", encoding="utf-8") as f:
+                json.dump(state_data, f, indent=2, default=str)
+        except Exception as e:
+            print(f"[Persist State Error] {e}")
+
+    def _load_persisted_state(self):
+        """Restores persisted operational state on Desktop startup (Auto-Recovery)."""
+        state_file = pathlib.Path(r"c:\Ngoding\xau_deep_sniper\data\cloud_trader_state.json")
+        state_data = None
+        if state_file.exists():
+            try:
+                with open(state_file, "r", encoding="utf-8") as f:
+                    state_data = json.load(f)
+            except Exception:
+                pass
+
+        if not state_data:
+            try:
+                active_row = self.db.get_active_order()
+                if active_row:
+                    state_data = {
+                        "cash": 250.0,
+                        "open_position": {
+                            "id": active_row.get("trade_id", "ORD-RESTORED"),
+                            "direction": active_row.get("direction", "BUY"),
+                            "lot": float(active_row.get("lot_size", 0.01)),
+                            "entry_price": float(active_row.get("entry_price", 0.0)),
+                            "current_sl": float(active_row.get("final_sl") or active_row.get("initial_sl", 0.0)),
+                            "initial_sl": float(active_row.get("initial_sl", 0.0)),
+                            "sl_price": float(active_row.get("final_sl") or active_row.get("initial_sl", 0.0)),
+                            "current_tp": float(active_row.get("tp_price", 0.0)),
+                            "tp_price": float(active_row.get("tp_price", 0.0)),
+                            "sl_dist": float(active_row.get("sl_dist", 400.0)),
+                            "peak_r": float(active_row.get("peak_r", 0.0)),
+                            "bars_held": int(active_row.get("bars_held", 1)),
+                            "open_time": str(active_row.get("open_time", "")),
+                            "friction": float(active_row.get("friction_cost", 0.17)),
+                            "reason": f"Restored from DB ({active_row.get('trade_id')})"
+                        },
+                        "is_armed": True,
+                        "symbol": active_row.get("symbol", "BTCUSD")
+                    }
+            except Exception:
+                pass
+
+        if not state_data:
+            return
+
+        # 1. Restore Cash & Sizing Parameters
+        if "cash" in state_data:
+            self.broker.cash = float(state_data["cash"])
+            self.spin_capital.setValue(self.broker.cash)
+
+        if "lot_mode" in state_data:
+            self.broker.lot_mode = str(state_data["lot_mode"])
+            self.combo_sizing.setCurrentIndex(0 if self.broker.lot_mode == "dynamic" else 1)
+
+        if "max_lot" in state_data:
+            self.broker.max_lot = float(state_data["max_lot"])
+            self.spin_max_lot.setValue(self.broker.max_lot)
+
+        # 2. Restore Symbol Selection
+        persisted_sym = str(state_data.get("symbol", "BTCUSD")).upper()
+        if persisted_sym in ["BTCUSD", "XAUUSD"]:
+            pair_idx = 1 if "BTC" in persisted_sym else 0
+            if self.combo_asset.currentIndex() != pair_idx:
+                self.combo_asset.setCurrentIndex(pair_idx)
+            else:
+                self._on_pair_changed(pair_idx)
+
+        # 3. Restore Armed State
+        if "is_armed" in state_data:
+            self.agent.set_armed(bool(state_data["is_armed"]))
+            self._update_agent_button_text()
+
+        # 4. Restore Open Position
+        pos = state_data.get("open_position")
+        if pos and isinstance(pos, dict) and pos.get("direction"):
+            self.broker.open_position = pos
+            ref_p = float(pos.get("entry_price", 0.0))
+            self.position_hud.update_position(pos, ref_p)
+            sl_price = float(pos.get("current_sl", pos.get("sl_price", 0.0)))
+            tp_price = float(pos.get("current_tp", pos.get("tp_price", 0.0)))
+            self.chart_widget.draw_order_lines(
+                pos["direction"], ref_p, sl_price, tp_price, float(pos.get("lot", 0.01))
+            )
+            self.journal_widget._log_event(
+                f"[RECOVERY] Resumed active {pos['direction']} {pos.get('lot', 0.01):.2f}L trade @ ${ref_p:,.2f} | SL: ${sl_price:,.2f}"
+            )
+            self.metrics_panel.update_metrics(self.broker.get_stats())
+
     def closeEvent(self, event):
         """Clean institutional exit: stops threads, releases memory, and exits cleanly."""
         try:
+            self._persist_current_state()
             if hasattr(self, "cloud_sync_timer") and self.cloud_sync_timer.isActive():
                 self.cloud_sync_timer.stop()
             if hasattr(self, "feed") and self.feed is not None:
