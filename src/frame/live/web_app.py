@@ -152,7 +152,22 @@ from src.frame.live.cloud_engine import CloudLiveTraderEngine
 
 @st.cache_resource
 def get_cloud_engine():
-    return CloudLiveTraderEngine()
+    engine = CloudLiveTraderEngine()
+    import threading
+    import time
+    
+    def _autonomous_cloud_loop():
+        print('[FLOWDEV CLOUD ENGINE] Autonomous 24/7 background worker started.')
+        while True:
+            try:
+                engine.step()
+            except Exception as err:
+                print(f'[CloudEngine Worker Error] {err}')
+            time.sleep(60)
+            
+    worker_t = threading.Thread(target=_autonomous_cloud_loop, daemon=True, name='CloudLiveTraderDaemon')
+    worker_t.start()
+    return engine
 
 @st.cache_resource
 def get_live_broker():
