@@ -14,6 +14,16 @@ class LiveTelegramNotifier:
         self.chat_id = chat_id or os.environ.get("TELEGRAM_CHAT_ID", "").strip()
         self.is_active = bool(self.bot_token and self.chat_id)
 
+    def send_trade_alert(self, action: str, data: Dict[str, Any]):
+        """Unified compatibility dispatch for cloud & local traders."""
+        try:
+            if action.upper() == 'OPEN':
+                self.notify_order_opened(data, data.get("balance", 0.0))
+            elif action.upper() == 'CLOSE':
+                self.notify_order_closed(data, {})
+        except Exception:
+            pass
+
     def send_message(self, text: str) -> bool:
         if not self.is_active:
             return False

@@ -99,7 +99,7 @@ class CloudLiveTraderEngine:
         self.db = TradeAuditDB(_ROOT / 'data' / 'flowdev_trade_audit.db')
         self.telegram = LiveTelegramNotifier()
         self.broker = LivePaperBroker(initial_capital=INITIAL_EQUITY, lot_mode='flat', max_lot=0.01)
-        self.symbol = "XAUUSD"
+        self.symbol = "BTCUSD"
         self.last_evaluated_candle_time = 0
         self.last_session_traded = ''
         self.is_armed = True
@@ -133,7 +133,7 @@ class CloudLiveTraderEngine:
                 'updated_at_utc': datetime.now(timezone.utc).isoformat()
             }
             with open(STATE_FILE, 'w', encoding='utf-8') as f:
-                json.dump(state, f, indent=2)
+                json.dump(state, f, indent=2, default=str)
         except Exception:
             pass
 
@@ -187,7 +187,7 @@ class CloudLiveTraderEngine:
             peak_r = pos['peak_r']
 
             # Check Hard SL Touch
-            sl_price = pos.get('current_sl', pos['sl_price'])
+            sl_price = pos.get('current_sl', pos.get('initial_sl', pos.get('sl_price', 0.0)))
             hit_sl = (cur_price <= sl_price) if direction == 'BUY' else (cur_price >= sl_price)
             if hit_sl:
                 trade = self.broker.close_order(sl_price, exit_reason='Stop Loss Hit')
@@ -228,7 +228,7 @@ class CloudLiveTraderEngine:
             # Stage 3: Dynamic Trailing Stop (+1.5R+)
             if peak_r >= TRAIL_TRIGGER_R:
                 trail_sl = (cur_price - (TRAIL_DIST_R * sl_dist)) if direction == 'BUY' else (cur_price + (TRAIL_DIST_R * sl_dist))
-                cur_sl = pos.get('current_sl', pos['sl_price'])
+                cur_sl = pos.get('current_sl', pos.get('initial_sl', pos.get('sl_price', 0.0)))
                 if (direction == 'BUY' and trail_sl > cur_sl) or (direction == 'SELL' and trail_sl < cur_sl):
                     pos['current_sl'] = round(trail_sl, 2)
                     events.append('Dynamic Trail: SL -> ' + str(pos['current_sl']))
@@ -307,7 +307,7 @@ class CloudLiveTraderEngine:
                     self.last_session_traded = session_name
                     self.db.record_order_opened(order)
                     self.telegram.send_trade_alert('OPEN', order)
-                    events.append('OPENED ' + signal + ' 0.01 Lot at ' + str(order['entry_price']) + ' | SL: ' + str(order['sl_price']))
+                    events.append('OPENED ' + signal + ' 0.01 Lot at ' + str(order['entry_price']) + ' | SL: ' + str(order.get('current_sl', order.get('initial_sl', 0.0))))
                     self.save_state()
                     return {'action': 'ORDER_OPENED', 'order': order, 'events': events}
 

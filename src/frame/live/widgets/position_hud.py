@@ -117,9 +117,11 @@ class LivePositionHUD(QFrame):
 
         self.set_standby(True)
 
-    def set_standby(self, is_standby: bool):
+    def set_standby(self, is_standby: bool, symbol: str = 'XAU/USD'):
         self.frame_standby.setVisible(is_standby)
         self.frame_active.setVisible(not is_standby)
+        if is_standby:
+            self.lbl_standby.setText(f'STANDBY // AGENT ACTIVELY SCANNING {symbol} FOR INSTITUTIONAL SETUP...')
 
     def update_position(self, pos: dict, live_price: float):
         self.set_standby(False)

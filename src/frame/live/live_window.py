@@ -221,7 +221,7 @@ class LiveTradingWindow(QMainWindow):
         lbl_hw = QLabel("[RTX 4050 / CUDA 12.6]  [M30 SNIPER]")
         lbl_hw.setStyleSheet("font-size: 11px; font-family: monospace; color: #8b949e;")
 
-        self.btn_open_web = QPushButton("🌐 OPEN CLOUD WEB APP")
+        self.btn_open_web = QPushButton("OPEN CLOUD WEB APP")
         self.btn_open_web.setToolTip("Open 1:1 Identical Cloud Web Application (Streamlit)")
         self.btn_open_web.setStyleSheet("""
             QPushButton {
@@ -232,7 +232,7 @@ class LiveTradingWindow(QMainWindow):
         """)
         self.btn_open_web.clicked.connect(self._open_web_app)
 
-        self.btn_switch_historical = QPushButton("📊 OPEN BACKTEST WORKSTATION")
+        self.btn_switch_historical = QPushButton("OPEN BACKTEST WORKSTATION")
         self.btn_switch_historical.setStyleSheet("""
             QPushButton {
                 background-color: #161e2e; border: 1px solid #27334a;
@@ -245,7 +245,7 @@ class LiveTradingWindow(QMainWindow):
         self.lbl_operator = QLabel(f"👤 {self.operator_user.get('display_name', 'OPERATOR').upper()}")
         self.lbl_operator.setStyleSheet("font-size: 10.5px; font-weight: 800; color: #38bdf8; background-color: #0f172a; padding: 4px 10px; border: 1px solid #1e293b; border-radius: 3px;")
 
-        self.btn_lock = QPushButton("🔒 LOCK")
+        self.btn_lock = QPushButton("LOCK")
         self.btn_lock.setToolTip("Lock Workstation Session Immediately")
         self.btn_lock.setStyleSheet("""
             QPushButton {
@@ -298,7 +298,7 @@ class LiveTradingWindow(QMainWindow):
         # Target Asset Selector
         left_layout.addWidget(QLabel("SELECT TRADING PAIR:"))
         self.combo_asset = QComboBox()
-        self.combo_asset.addItems(["?? XAU/USD (Spot Gold)", "? BTC/USD (Bitcoin Crypto)"])
+        self.combo_asset.addItems(["XAU/USD (Spot Gold)", "BTC/USD (Bitcoin Crypto)"])
         self.combo_asset.setStyleSheet("""
             QComboBox {
                 background-color: #121824; border: 1px solid #1f293d;
@@ -322,22 +322,22 @@ class LiveTradingWindow(QMainWindow):
         radar_layout.setContentsMargins(6, 6, 6, 6)
         radar_layout.setSpacing(3)
 
-        self.lbl_radar_pair = QLabel("?? TARGET: ?? XAU/USD")
+        self.lbl_radar_pair = QLabel("TARGET: XAU/USD (Spot Gold)")
         self.lbl_radar_pair.setStyleSheet("color: #38bdf8; font-size: 10.5px; font-weight: 700; font-family: monospace;")
         radar_layout.addWidget(self.lbl_radar_pair)
 
-        self.lbl_radar_status = QLabel("? STATUS: [ ?? STANDBY / IDLE ]")
+        self.lbl_radar_status = QLabel("STATUS: [ STANDBY / IDLE ]")
         self.lbl_radar_status.setStyleSheet("color: #f87171; font-size: 10px; font-weight: 700; font-family: monospace;")
         radar_layout.addWidget(self.lbl_radar_status)
 
-        self.lbl_radar_market = QLabel("?? MARKET: Forex (Weekend Shield Active)")
+        self.lbl_radar_market = QLabel("MARKET: Forex (Weekend Shield Active)")
         self.lbl_radar_market.setStyleSheet("color: #94a3b8; font-size: 9.5px; font-family: monospace;")
         radar_layout.addWidget(self.lbl_radar_market)
 
         left_layout.addWidget(self.radar_box)
 
         # Explicit Targeted Trade Toggle
-        self.btn_toggle_agent = QPushButton("?? START AGENT TRADE (XAU/USD)")
+        self.btn_toggle_agent = QPushButton("[ START AGENT TRADE (XAU/USD) ]")
         self.btn_toggle_agent.setStyleSheet("""
             QPushButton {
                 background-color: #004d40; border: 1px solid #00bfa5;
@@ -680,11 +680,11 @@ class LiveTradingWindow(QMainWindow):
 
         self.position_hud.set_standby(True, symbol=disp)
         # 4. Update Radar HUD
-        self.lbl_radar_pair.setText(f"?? TARGET: {'?? XAU/USD' if sym == 'XAUUSD' else '? BTC/USD'}")
+        self.lbl_radar_pair.setText(f"TARGET: {'XAU/USD (Spot Gold)' if sym == 'XAUUSD' else 'BTC/USD (Bitcoin Crypto)'}")
         if sym == "BTCUSD":
-            self.lbl_radar_market.setText("?? MARKET: 24/7 Crypto Active (Weekend Trading OK)")
+            self.lbl_radar_market.setText("MARKET: 24/7 Crypto Active (Weekend Trading OK)")
         else:
-            self.lbl_radar_market.setText("?? MARKET: Forex (Weekend Shield Active)")
+            self.lbl_radar_market.setText("MARKET: Forex (Weekend Shield Active)")
 
         self._update_agent_button_text()
         self.journal_widget._log_event(f"[ASSET] Target pair set to {disp} | Operator can start trading")
@@ -695,22 +695,22 @@ class LiveTradingWindow(QMainWindow):
 
     def _update_agent_button_text(self):
         if self.agent.is_armed:
-            self.btn_toggle_agent.setText(f"?? PAUSE AGENT TRADE ({self.current_pair_display})")
+            self.btn_toggle_agent.setText(f"[ PAUSE AGENT TRADE ({self.current_pair_display}) ]")
             self.btn_toggle_agent.setStyleSheet("""
                 QPushButton { background-color: #4a1515; border: 1px solid #ef4444; color: #fca5a5; font-size: 11px; font-weight: 800; padding: 9px; border-radius: 3px; }
                 QPushButton:hover { background-color: #5c1b1b; }
             """)
-            self.lbl_radar_status.setText(f"? STATUS: [ ?? ARMED & HUNTING ON {self.current_pair_display} ]")
+            self.lbl_radar_status.setText(f"STATUS: [ ARMED & HUNTING ON {self.current_pair_display} ]")
             self.lbl_radar_status.setStyleSheet("color: #00e676; font-size: 10px; font-weight: 700; font-family: monospace;")
             self.lbl_agent_status.setText(f"[AGENT: ARMED ({self.current_symbol})]")
             self.lbl_agent_status.setStyleSheet("font-size: 11px; font-family: monospace; color: #00e676; font-weight: 700;")
         else:
-            self.btn_toggle_agent.setText(f"?? START AGENT TRADE ({self.current_pair_display})")
+            self.btn_toggle_agent.setText(f"[ START AGENT TRADE ({self.current_pair_display}) ]")
             self.btn_toggle_agent.setStyleSheet("""
                 QPushButton { background-color: #004d40; border: 1px solid #00bfa5; color: #ffffff; font-size: 11px; font-weight: 800; padding: 9px; border-radius: 3px; }
                 QPushButton:hover { background-color: #00695c; }
             """)
-            self.lbl_radar_status.setText("? STATUS: [ ?? STANDBY / WAITING OPERATOR ]")
+            self.lbl_radar_status.setText("STATUS: [ STANDBY / WAITING OPERATOR ]")
             self.lbl_radar_status.setStyleSheet("color: #f87171; font-size: 10px; font-weight: 700; font-family: monospace;")
             self.lbl_agent_status.setText(f"[AGENT: STANDBY ({self.current_symbol})]")
             self.lbl_agent_status.setStyleSheet("font-size: 11px; font-family: monospace; color: #f87171; font-weight: 700;")

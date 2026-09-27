@@ -184,34 +184,9 @@ broker = get_live_broker()
 auth_manager = get_auth_manager()
 
 # -------------------------------------------------------------
-# Handle Cron-Job.org Keep-Alive ping (Cryptographic Bypass)
+# Desktop Workstation IPC / HTTPS Sync API (Priority #1)
 # -------------------------------------------------------------
 params = st.query_params
-cron_key = params.get("cron_key") or params.get("key")
-if "cron_ping" in params or "ping" in params or cron_key:
-    if cron_key and auth_manager.verify_cron_key(str(cron_key)):
-        cloud_engine = get_cloud_engine()
-        exec_report = cloud_engine.step()
-        st.write(json.dumps({
-            "status": "alive",
-            "auth": "CRON_VERIFIED",
-            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
-            "source": "cron-job.org",
-            "broker_balance": cloud_engine.broker.cash,
-            "has_open_position": cloud_engine.broker.open_position is not None,
-            "cloud_engine_step": exec_report
-        }))
-        st.stop()
-    else:
-        st.write(json.dumps({
-            "status": "error",
-            "message": "Unauthorized keep-alive ping. Valid cron_key required."
-        }))
-        st.stop()
-
-# -------------------------------------------------------------
-# Desktop Workstation IPC / HTTPS Sync API
-# -------------------------------------------------------------
 api_mode = params.get("api")
 if api_mode:
     token = params.get("key") or params.get("cron_key") or ""
@@ -221,7 +196,7 @@ if api_mode:
             st.json({
                 "status": "online",
                 "is_armed": getattr(cloud_eng, "is_armed", True),
-                "symbol": getattr(cloud_eng, "symbol", "XAUUSD"),
+                "symbol": getattr(cloud_eng, "symbol", "BTCUSD"),
                 "timestamp_utc": datetime.now(timezone.utc).isoformat(),
                 "broker": {
                     "cash": cloud_eng.broker.cash,
@@ -264,6 +239,31 @@ if api_mode:
             st.stop()
     else:
         st.json({"error": "Unauthorized desktop IPC request. Invalid key."})
+        st.stop()
+
+# -------------------------------------------------------------
+# Handle Cron-Job.org Keep-Alive ping (Cryptographic Bypass)
+# -------------------------------------------------------------
+cron_key = params.get("cron_key") or params.get("key")
+if "cron_ping" in params or "ping" in params:
+    if cron_key and auth_manager.verify_cron_key(str(cron_key)):
+        cloud_engine = get_cloud_engine()
+        exec_report = cloud_engine.step()
+        st.write(json.dumps({
+            "status": "alive",
+            "auth": "CRON_VERIFIED",
+            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+            "source": "cron-job.org",
+            "broker_balance": cloud_engine.broker.cash,
+            "has_open_position": cloud_engine.broker.open_position is not None,
+            "cloud_engine_step": exec_report
+        }))
+        st.stop()
+    else:
+        st.write(json.dumps({
+            "status": "error",
+            "message": "Unauthorized keep-alive ping. Valid cron_key required."
+        }))
         st.stop()
 
 # -------------------------------------------------------------
@@ -402,6 +402,22 @@ if selected_mode == "🔴 LIVE REALTIME TRADER":
     with col_ctrl:
         st.markdown("### 🎛️ CONTROLS")
         st.caption("Live Realtime Market Simulator")
+
+        # Target Trading Asset
+        cloud_eng = get_cloud_engine()
+        cur_sym = getattr(cloud_eng, "symbol", "BTCUSD")
+        pair_idx = 1 if "BTC" in cur_sym else 0
+        asset_choice = st.selectbox(
+            "Target Trading Asset:",
+            ["XAU/USD (Spot Gold)", "BTC/USD (Bitcoin Crypto)"],
+            index=pair_idx
+        )
+        selected_sym = "BTCUSD" if "BTC" in asset_choice else "XAUUSD"
+        if selected_sym != cloud_eng.symbol:
+            cloud_eng.symbol = selected_sym
+            cloud_eng.feed.set_symbol(selected_sym)
+            cloud_eng.save_state()
+            st.rerun()
 
         # Sizing Mode
         lot_mode_choice = st.selectbox(
@@ -548,17 +564,18 @@ if selected_mode == "🔴 LIVE REALTIME TRADER":
             """, unsafe_allow_html=True)
 
                 # 3. Live Candlestick Chart (Official TradingView Global Real-Time Stream)
-        st.markdown("#### ?? LIVE XAU/USD TRADINGVIEW GLOBAL REAL-TIME STREAM")
+        active_tv_sym = "BINANCE:BTCUSDT" if "BTC" in getattr(cloud_eng, "symbol", "BTCUSD") else "OANDA:XAUUSD"
+        st.markdown(f"#### LIVE {cloud_eng.symbol} TRADINGVIEW GLOBAL REAL-TIME STREAM")
         import streamlit.components.v1 as components
         
-        tv_cloud_html = """
+        tv_cloud_html = f"""
         <div class="tradingview-widget-container" style="height:520px;width:100%">
           <div id="tv_chart_cloud" style="height:calc(100% - 32px);width:100%"></div>
           <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
           <script type="text/javascript">
-          new TradingView.widget({
+          new TradingView.widget({{
             "autosize": true,
-            "symbol": "OANDA:XAUUSD",
+            "symbol": "{active_tv_sym}",
             "interval": "30",
             "timezone": "Asia/Jakarta",
             "theme": "dark",
@@ -574,7 +591,7 @@ if selected_mode == "🔴 LIVE REALTIME TRADER":
             "hide_side_toolbar": false,
             "withdateranges": true,
             "hide_volume": false
-          });
+          }});
           </script>
         </div>
         """
