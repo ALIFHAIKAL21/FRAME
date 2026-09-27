@@ -24,16 +24,24 @@ from src.frame.live.telegram_bot import LiveTelegramNotifier
 STATE_FILE = _ROOT / 'data' / 'cloud_trader_state.json'
 
 class CloudMarketFeed:
-    def __init__(self):
+    def __init__(self, symbol: str = "XAUUSD"):
+        self.symbol = symbol.upper()
         self.last_bid = 4321.20
         self.last_ask = 4321.55
         self.last_fetch_time = 0
+
+    def set_symbol(self, symbol: str):
+        self.symbol = symbol.upper()
+
+    def _get_ticker(self) -> str:
+        return "BTC-USD" if "BTC" in self.symbol else "GC=F"
 
     def fetch_live_price(self) -> Dict[str, Any]:
         try:
             import httpx
             headers = {'User-Agent': 'Mozilla/5.0'}
-            url = 'https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1m&range=1d'
+            ticker = self._get_ticker()
+            url = f'https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval=1m&range=1d'
             with httpx.Client(timeout=4.0) as client:
                 r = client.get(url, headers=headers)
                 if r.status_code == 200:
@@ -53,7 +61,8 @@ class CloudMarketFeed:
         try:
             import httpx
             headers = {'User-Agent': 'Mozilla/5.0'}
-            url = 'https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=30m&range=5d'
+            ticker = self._get_ticker()
+            url = f'https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval=30m&range=5d'
             with httpx.Client(timeout=5.0) as client:
                 r = client.get(url, headers=headers)
                 if r.status_code == 200:
@@ -90,6 +99,7 @@ class CloudLiveTraderEngine:
         self.db = TradeAuditDB(_ROOT / 'data' / 'flowdev_trade_audit.db')
         self.telegram = LiveTelegramNotifier()
         self.broker = LivePaperBroker(initial_capital=INITIAL_EQUITY, lot_mode='flat', max_lot=0.01)
+        self.symbol = "XAUUSD"
         self.last_evaluated_candle_time = 0
         self.last_session_traded = ''
         self.is_armed = True
@@ -105,6 +115,8 @@ class CloudLiveTraderEngine:
                     self.last_evaluated_candle_time = int(state.get('last_candle_time', 0))
                     self.last_session_traded = str(state.get('last_session_traded', ''))
                     self.is_armed = bool(state.get('is_armed', True))
+                    self.symbol = str(state.get('symbol', 'XAUUSD'))
+                    self.feed.set_symbol(self.symbol)
             except Exception:
                 pass
 
@@ -117,6 +129,7 @@ class CloudLiveTraderEngine:
                 'last_candle_time': self.last_evaluated_candle_time,
                 'last_session_traded': self.last_session_traded,
                 'is_armed': self.is_armed,
+                'symbol': self.symbol,
                 'updated_at_utc': datetime.now(timezone.utc).isoformat()
             }
             with open(STATE_FILE, 'w', encoding='utf-8') as f:
@@ -140,9 +153,12 @@ class CloudLiveTraderEngine:
         self.last_session_traded = ''
         self.save_state()
 
-    def update_config(self, lot_mode: str, max_lot: float):
+    def update_config(self, lot_mode: str, max_lot: float, symbol: Optional[str] = None):
         self.broker.lot_mode = lot_mode
         self.broker.max_lot = max_lot
+        if symbol:
+            self.symbol = symbol.upper()
+            self.feed.set_symbol(self.symbol)
         self.save_state()
 
     def step(self) -> Dict[str, Any]:
@@ -233,10 +249,12 @@ class CloudLiveTraderEngine:
             return {'action': 'OMS_MONITORED', 'events': events, 'position': pos, 'current_r': round(current_r, 2)}
 
         # 2. CHECK NEW ENTRY OPPORTUNITY (IF NO OPEN POSITION)
-        if now_utc.weekday() == 4 and now_utc.hour >= 18:
-            return {'action': 'WEEKEND_SHIELD_ACTIVE', 'message': 'No entries after Fri 18:00 UTC'}
-        if now_utc.weekday() in (5, 6):
-            return {'action': 'WEEKEND_MARKET_CLOSED', 'message': 'Forex markets closed on weekend'}
+        is_btc = "BTC" in self.symbol.upper()
+        if not is_btc:
+            if now_utc.weekday() == 4 and now_utc.hour >= 18:
+                return {'action': 'WEEKEND_SHIELD_ACTIVE', 'message': 'No entries after Fri 18:00 UTC'}
+            if now_utc.weekday() in (5, 6):
+                return {'action': 'WEEKEND_MARKET_CLOSED', 'message': 'Forex markets closed on weekend'}
 
         if session_name in ('OFF_SESSION', 'BLACKOUT_PRE_LONDON'):
             return {'action': 'STANDBY_SESSION', 'session': session_name}
@@ -259,8 +277,12 @@ class CloudLiveTraderEngine:
                 tr2 = np.abs(highs[1:] - closes[:-1])
                 tr3 = np.abs(lows[1:] - closes[:-1])
                 tr = np.maximum(tr1, np.maximum(tr2, tr3))
-                atr14 = float(np.mean(tr[-14:])) if len(tr) >= 14 else 10.0
-                sl_dist = round(max(8.0, min(18.0, SL_ATR_MULT * atr14)), 2)
+                if is_btc:
+                    atr14 = float(np.mean(tr[-14:])) if len(tr) >= 14 else 800.0
+                    sl_dist = round(max(400.0, min(3500.0, SL_ATR_MULT * atr14)), 2)
+                else:
+                    atr14 = float(np.mean(tr[-14:])) if len(tr) >= 14 else 10.0
+                    sl_dist = round(max(8.0, min(25.0, SL_ATR_MULT * atr14)), 2)
 
                 fast_ma = np.mean(closes[-8:])
                 slow_ma = np.mean(closes[-24:])

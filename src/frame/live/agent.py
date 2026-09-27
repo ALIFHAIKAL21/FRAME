@@ -56,7 +56,8 @@ class LiveAgent(QObject):
     def __init__(self, broker: LivePaperBroker, parent=None):
         super().__init__(parent)
         self.broker = broker
-        self.is_armed = True
+        self.symbol = "XAUUSD"
+        self.is_armed = False  # Start in safe STANDBY by default (requires operator to toggle start)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu") if torch is not None else "cpu"
         self.model = None
         self.last_evaluated_bar_time = 0
@@ -205,12 +206,16 @@ class LiveAgent(QObject):
 
         # Check session eligibility
         dt_utc = datetime.fromtimestamp(c_time, timezone.utc)
-        cur_session = self.get_current_session(dt_utc)
-        if cur_session is None or cur_session == self.last_session_traded:
-            return
+        is_btc = "BTC" in self.symbol.upper()
+        if not is_btc:
+            cur_session = self.get_current_session(dt_utc)
+            if cur_session is None or cur_session == self.last_session_traded:
+                return
+        else:
+            cur_session = "CRYPTO_24_7"
 
         # Compute ATR(14) from recent candles
-        if len(recent_candles) < 20:
+        if len(recent_candles) < 14:
             return
 
         highs = [c["high"] for c in recent_candles[-15:]]
@@ -220,8 +225,14 @@ class LiveAgent(QObject):
         for i in range(len(highs)):
             tr = max(highs[i] - lows[i], abs(highs[i] - closes[i]), abs(lows[i] - closes[i]))
             trs.append(tr)
-        atr_val = float(np.mean(trs)) if trs else 4.5
-        sl_dist = round(max(3.0, atr_val * SL_ATR_MULT), 2)
+        
+        if is_btc:
+            min_sl, max_sl, def_atr = 400.0, 3500.0, 800.0
+        else:
+            min_sl, max_sl, def_atr = 8.0, 25.0, 10.0
+
+        atr_val = float(np.mean(trs)) if trs else def_atr
+        sl_dist = round(max(min_sl, min(max_sl, atr_val * SL_ATR_MULT)), 2)
 
         # Run AI Inference
         action, conf, probs = self._infer_signal(recent_candles)

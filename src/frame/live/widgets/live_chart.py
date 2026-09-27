@@ -355,6 +355,16 @@ class LiveRealtimeChartWidget(QWidget):
         self._reload_chart_html()
         layout.addWidget(self.web_view)
 
+    def _get_tv_symbol(self) -> str:
+        sym = getattr(self, "symbol", "XAUUSD").upper()
+        if "BTC" in sym:
+            return "BINANCE:BTCUSDT"
+        return "OANDA:XAUUSD"
+
+    def set_symbol(self, symbol: str):
+        self.symbol = symbol.upper()
+        self._reload_chart_html()
+
     def _get_tv_interval(self, tf_label: str) -> str:
         mapping = {
             "1M": "1", "5M": "5", "15M": "15", "30M": "30",
@@ -365,7 +375,8 @@ class LiveRealtimeChartWidget(QWidget):
     def _reload_chart_html(self):
         if self.chart_mode == "tradingview":
             tv_res = self._get_tv_interval(self.current_timeframe)
-            html = get_tradingview_html(symbol="OANDA:XAUUSD", interval=tv_res)
+            tv_sym = self._get_tv_symbol()
+            html = get_tradingview_html(symbol=tv_sym, interval=tv_res)
             self.web_view.setHtml(html)
         else:
             self.web_view.setHtml(get_lightweight_chart_html())

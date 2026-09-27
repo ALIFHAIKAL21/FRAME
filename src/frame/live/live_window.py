@@ -110,9 +110,12 @@ class CloudServerClient:
         if not self.base_url: return False
         return self._send_quick_get(f"{self.base_url}/?api=reset&capital={capital}&key={urllib.parse.quote(self.secret_key)}")
 
-    def update_config(self, lot_mode: str, max_lot: float) -> bool:
+    def update_config(self, lot_mode: str, max_lot: float, symbol: Optional[str] = None) -> bool:
         if not self.base_url: return False
-        return self._send_quick_get(f"{self.base_url}/?api=config&lot_mode={lot_mode}&max_lot={max_lot}&key={urllib.parse.quote(self.secret_key)}")
+        url = f"{self.base_url}/?api=config&lot_mode={lot_mode}&max_lot={max_lot}&key={urllib.parse.quote(self.secret_key)}"
+        if symbol:
+            url += f"&symbol={urllib.parse.quote(symbol)}"
+        return self._send_quick_get(url)
 
 class CloudSyncWorker(QObject):
     state_ready = Signal(dict)
@@ -167,6 +170,8 @@ class LiveTradingWindow(QMainWindow):
         # State
         self.last_tick: dict = {}
         self.recent_candles: list = []
+        self.current_symbol: str = "XAUUSD"
+        self.current_pair_display: str = "XAU/USD" 
         
         # Cloud Server 24/7 Client State (Zero-UI Non-Blocking Async Channel)
         self.cloud_client = CloudServerClient(DEFAULT_CLOUD_SERVER_URL)
@@ -286,17 +291,58 @@ class LiveTradingWindow(QMainWindow):
         left_layout.setContentsMargins(10, 10, 10, 10)
         left_layout.setSpacing(8)
 
-        lbl_ctrl = QLabel("LIVE TRADING ENGINE")
+        lbl_ctrl = QLabel("MISSION CONTROL & TARGET ASSET")
         lbl_ctrl.setStyleSheet("font-size: 10px; font-weight: 700; color: #8b949e; letter-spacing: 1px;")
         left_layout.addWidget(lbl_ctrl)
 
+        # Target Asset Selector
+        left_layout.addWidget(QLabel("SELECT TRADING PAIR:"))
+        self.combo_asset = QComboBox()
+        self.combo_asset.addItems(["?? XAU/USD (Spot Gold)", "? BTC/USD (Bitcoin Crypto)"])
+        self.combo_asset.setStyleSheet("""
+            QComboBox {
+                background-color: #121824; border: 1px solid #1f293d;
+                color: #f0f6fc; font-weight: 700; padding: 5px; font-size: 11px;
+                border-radius: 3px;
+            }
+            QComboBox:hover { border-color: #00bfa5; }
+        """)
+        self.combo_asset.currentIndexChanged.connect(self._on_pair_changed)
+        left_layout.addWidget(self.combo_asset)
 
-        # Arm/Disarm Master Switch
-        self.btn_toggle_agent = QPushButton("⚡ ARMED (ACTIVELY TRADING)")
+        # Tactical Radar Box (Clear Direction & Readiness)
+        self.radar_box = QFrame()
+        self.radar_box.setStyleSheet("""
+            QFrame {
+                background-color: #080d16; border: 1px solid #1c2638;
+                border-radius: 4px; padding: 6px;
+            }
+        """)
+        radar_layout = QVBoxLayout(self.radar_box)
+        radar_layout.setContentsMargins(6, 6, 6, 6)
+        radar_layout.setSpacing(3)
+
+        self.lbl_radar_pair = QLabel("?? TARGET: ?? XAU/USD")
+        self.lbl_radar_pair.setStyleSheet("color: #38bdf8; font-size: 10.5px; font-weight: 700; font-family: monospace;")
+        radar_layout.addWidget(self.lbl_radar_pair)
+
+        self.lbl_radar_status = QLabel("? STATUS: [ ?? STANDBY / IDLE ]")
+        self.lbl_radar_status.setStyleSheet("color: #f87171; font-size: 10px; font-weight: 700; font-family: monospace;")
+        radar_layout.addWidget(self.lbl_radar_status)
+
+        self.lbl_radar_market = QLabel("?? MARKET: Forex (Weekend Shield Active)")
+        self.lbl_radar_market.setStyleSheet("color: #94a3b8; font-size: 9.5px; font-family: monospace;")
+        radar_layout.addWidget(self.lbl_radar_market)
+
+        left_layout.addWidget(self.radar_box)
+
+        # Explicit Targeted Trade Toggle
+        self.btn_toggle_agent = QPushButton("?? START AGENT TRADE (XAU/USD)")
         self.btn_toggle_agent.setStyleSheet("""
             QPushButton {
                 background-color: #004d40; border: 1px solid #00bfa5;
-                color: #ffffff; font-size: 11.5px; font-weight: 800; padding: 8px; letter-spacing: 0.5px;
+                color: #ffffff; font-size: 11px; font-weight: 800; padding: 9px;
+                border-radius: 3px; letter-spacing: 0.5px;
             }
             QPushButton:hover { background-color: #00695c; border-color: #1de9b6; }
         """)
@@ -622,29 +668,64 @@ class LiveTradingWindow(QMainWindow):
         self.agent.manual_close(p)
 
 
+    def _on_pair_changed(self, idx: int):
+        pairs = [("XAUUSD", "XAU/USD"), ("BTCUSD", "BTC/USD")]
+        sym, disp = pairs[idx]
+        self.current_symbol = sym
+        self.current_pair_display = disp
+
+        # 1. Update Chart
+        self.chart_widget.set_symbol(sym)
+        # 2. Update Market Feed
+        self.feed.set_symbol(sym)
+        # 3. Update Trading Agent
+        self.agent.set_symbol(sym)
+
+        # 4. Update Radar HUD
+        self.lbl_radar_pair.setText(f"?? TARGET: {'?? XAU/USD' if sym == 'XAUUSD' else '? BTC/USD'}")
+        if sym == "BTCUSD":
+            self.lbl_radar_market.setText("?? MARKET: 24/7 Crypto Active (Weekend Trading OK)")
+        else:
+            self.lbl_radar_market.setText("?? MARKET: Forex (Weekend Shield Active)")
+
+        self._update_agent_button_text()
+        self.journal_widget._log_event(f"[ASSET] Target pair set to {disp} | Operator can start trading")
+
+        # 5. Sync to Cloud Server
+        if hasattr(self, "cloud_client") and self.cloud_client:
+            threading.Thread(target=lambda: self.cloud_client.update_config(self.broker.lot_mode, self.broker.max_lot, symbol=sym), daemon=True).start()
+
+    def _update_agent_button_text(self):
+        if self.agent.is_armed:
+            self.btn_toggle_agent.setText(f"?? PAUSE AGENT TRADE ({self.current_pair_display})")
+            self.btn_toggle_agent.setStyleSheet("""
+                QPushButton { background-color: #4a1515; border: 1px solid #ef4444; color: #fca5a5; font-size: 11px; font-weight: 800; padding: 9px; border-radius: 3px; }
+                QPushButton:hover { background-color: #5c1b1b; }
+            """)
+            self.lbl_radar_status.setText(f"? STATUS: [ ?? ARMED & HUNTING ON {self.current_pair_display} ]")
+            self.lbl_radar_status.setStyleSheet("color: #00e676; font-size: 10px; font-weight: 700; font-family: monospace;")
+            self.lbl_agent_status.setText(f"[AGENT: ARMED ({self.current_symbol})]")
+            self.lbl_agent_status.setStyleSheet("font-size: 11px; font-family: monospace; color: #00e676; font-weight: 700;")
+        else:
+            self.btn_toggle_agent.setText(f"?? START AGENT TRADE ({self.current_pair_display})")
+            self.btn_toggle_agent.setStyleSheet("""
+                QPushButton { background-color: #004d40; border: 1px solid #00bfa5; color: #ffffff; font-size: 11px; font-weight: 800; padding: 9px; border-radius: 3px; }
+                QPushButton:hover { background-color: #00695c; }
+            """)
+            self.lbl_radar_status.setText("? STATUS: [ ?? STANDBY / WAITING OPERATOR ]")
+            self.lbl_radar_status.setStyleSheet("color: #f87171; font-size: 10px; font-weight: 700; font-family: monospace;")
+            self.lbl_agent_status.setText(f"[AGENT: STANDBY ({self.current_symbol})]")
+            self.lbl_agent_status.setStyleSheet("font-size: 11px; font-family: monospace; color: #f87171; font-weight: 700;")
+
     def _toggle_agent_armed(self):
         new_state = not self.agent.is_armed
         self.agent.set_armed(new_state)
+        self._update_agent_button_text()
         if hasattr(self, "cloud_client") and self.cloud_client:
             threading.Thread(target=lambda: self.cloud_client.toggle_agent(new_state), daemon=True).start()
 
     def _on_agent_status_changed(self, armed: bool, text: str):
-        if armed:
-            self.btn_toggle_agent.setText("⚡ ARMED (ACTIVELY TRADING)")
-            self.btn_toggle_agent.setStyleSheet("""
-                QPushButton { background-color: #004d40; border: 1px solid #00bfa5; color: #ffffff; font-size: 11.5px; font-weight: 800; padding: 8px; }
-                QPushButton:hover { background-color: #00695c; }
-            """)
-            self.lbl_agent_status.setText("[AGENT: ARMED & HUNTING]")
-            self.lbl_agent_status.setStyleSheet("font-size: 11px; font-family: monospace; color: #00e676; font-weight: 700;")
-        else:
-            self.btn_toggle_agent.setText("⏸ PAUSED (DISARMED)")
-            self.btn_toggle_agent.setStyleSheet("""
-                QPushButton { background-color: #4a1515; border: 1px solid #ef4444; color: #fca5a5; font-size: 11.5px; font-weight: 800; padding: 8px; }
-                QPushButton:hover { background-color: #5c1b1b; }
-            """)
-            self.lbl_agent_status.setText("[AGENT: PAUSED]")
-            self.lbl_agent_status.setStyleSheet("font-size: 11px; font-family: monospace; color: #f87171; font-weight: 700;")
+        self._update_agent_button_text()
 
     def _on_sizing_changed(self, idx: int):
         self.broker.lot_mode = "dynamic" if idx == 0 else "flat"

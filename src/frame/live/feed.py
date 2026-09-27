@@ -90,6 +90,15 @@ class LiveMarketFeed(QObject):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._poll_tick)
 
+    def set_symbol(self, symbol: str):
+        """Switches active trading feed symbol (e.g. XAUUSD, BTCUSD)."""
+        self.symbol = symbol.upper()
+        self.current_candle = None
+        self._connect()
+
+    def _get_yahoo_ticker(self) -> str:
+        return "BTC-USD" if "BTC" in self.symbol.upper() else "GC=F"
+
     def set_timeframe(self, tf_label: str):
         """Switches candle aggregation timeframe (1M, 5M, 15M, 30M, 1H, 4H, 1D)."""
         if tf_label in TIMEFRAME_MAP:
@@ -120,17 +129,19 @@ class LiveMarketFeed(QObject):
     def _find_mt5_symbol(self) -> Optional[str]:
         if not HAS_MT5:
             return None
-        candidates = [self.symbol, "XAUUSD", "GOLD", "XAUUSD.m", "XAUUSDm", "XAUUSD_i"]
-        for c in candidates:
-            s = mt5.symbol_info(c)
+        is_btc = "BTC" in self.symbol.upper()
+        candidates = [self.symbol, "BTCUSD", "BTC", "BTCUSDT"] if is_btc else [self.symbol, "XAUUSD", "GOLD", "XAUUSD.m", "XAUUSDm", "XAUUSD_i"]
+        for cand in candidates:
+            s = mt5.symbol_info(cand)
             if s is not None:
                 if not s.visible:
-                    mt5.symbol_select(c, True)
-                return c
+                    mt5.symbol_select(cand, True)
+                return cand
         symbols = mt5.symbols_get()
         if symbols:
+            keyword = "BTC" if is_btc else "XAU"
             for s in symbols:
-                if "XAU" in s.name.upper() or "GOLD" in s.name.upper():
+                if keyword in s.name.upper():
                     if not s.visible:
                         mt5.symbol_select(s.name, True)
                     return s.name

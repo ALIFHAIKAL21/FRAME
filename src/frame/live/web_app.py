@@ -221,6 +221,7 @@ if api_mode:
             st.json({
                 "status": "online",
                 "is_armed": getattr(cloud_eng, "is_armed", True),
+                "symbol": getattr(cloud_eng, "symbol", "XAUUSD"),
                 "timestamp_utc": datetime.now(timezone.utc).isoformat(),
                 "broker": {
                     "cash": cloud_eng.broker.cash,
@@ -257,8 +258,9 @@ if api_mode:
         elif api_mode == "config":
             lot_mode = str(params.get("lot_mode", "flat"))
             max_lot = float(params.get("max_lot", 0.01))
-            cloud_eng.update_config(lot_mode, max_lot)
-            st.json({"success": True, "message": f"Cloud config updated: lot_mode={lot_mode}, max_lot={max_lot}"})
+            symbol = params.get("symbol")
+            cloud_eng.update_config(lot_mode, max_lot, symbol=str(symbol) if symbol else None)
+            st.json({"success": True, "symbol": cloud_eng.symbol, "message": f"Cloud config updated: symbol={cloud_eng.symbol}, lot_mode={lot_mode}, max_lot={max_lot}"})
             st.stop()
     else:
         st.json({"error": "Unauthorized desktop IPC request. Invalid key."})
