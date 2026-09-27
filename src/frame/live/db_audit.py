@@ -11,7 +11,8 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 import pandas as pd
 
-DEFAULT_DB_PATH = pathlib.Path(r"c:\Ngoding\xau_deep_sniper\data\flowdev_trade_audit.db")
+_ROOT_DIR = pathlib.Path(__file__).resolve().parent.parent.parent.parent
+DEFAULT_DB_PATH = _ROOT_DIR / "data" / "flowdev_trade_audit.db"
 
 class TradeAuditDB:
     def __init__(self, db_path: Optional[pathlib.Path] = None):

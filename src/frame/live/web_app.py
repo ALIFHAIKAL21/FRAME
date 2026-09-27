@@ -148,9 +148,15 @@ def get_telegram():
 def get_cloud_sync():
     return CloudStateSync()
 
+from src.frame.live.cloud_engine import CloudLiveTraderEngine
+
+@st.cache_resource
+def get_cloud_engine():
+    return CloudLiveTraderEngine()
+
 @st.cache_resource
 def get_live_broker():
-    return LivePaperBroker(initial_capital=500.0, lot_mode="dynamic", max_lot=2.0)
+    return get_cloud_engine().broker
 
 @st.cache_resource
 def get_auth_manager():
@@ -169,13 +175,16 @@ params = st.query_params
 cron_key = params.get("cron_key") or params.get("key")
 if "cron_ping" in params or "ping" in params or cron_key:
     if cron_key and auth_manager.verify_cron_key(str(cron_key)):
+        cloud_engine = get_cloud_engine()
+        exec_report = cloud_engine.step()
         st.write(json.dumps({
             "status": "alive",
             "auth": "CRON_VERIFIED",
             "timestamp_utc": datetime.now(timezone.utc).isoformat(),
             "source": "cron-job.org",
-            "broker_balance": broker.cash,
-            "has_open_position": broker.open_position is not None
+            "broker_balance": cloud_engine.broker.cash,
+            "has_open_position": cloud_engine.broker.open_position is not None,
+            "cloud_engine_step": exec_report
         }))
         st.stop()
     else:
