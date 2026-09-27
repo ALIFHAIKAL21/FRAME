@@ -93,9 +93,16 @@ class LiveAgent(QObject):
         except Exception as e:
             self.model = None
 
+    def set_symbol(self, symbol: str):
+        self.symbol = symbol.upper()
+        self.last_evaluated_bar_time = 0
+        status_text = f"TARGET: {self.symbol} | {'ARMED' if self.is_armed else 'STANDBY'}"
+        self.agent_status_changed.emit(self.is_armed, status_text)
+
     def set_armed(self, armed: bool):
         self.is_armed = armed
-        status_text = "ARMED // ACTIVELY SCANNING" if armed else "DISARMED // STANDBY"
+        sym = getattr(self, "symbol", "XAUUSD")
+        status_text = f"ARMED // SCANNING {sym}" if armed else f"STANDBY ({sym})"
         self.agent_status_changed.emit(armed, status_text)
 
     def get_current_session(self, dt_utc: datetime) -> Optional[str]:
