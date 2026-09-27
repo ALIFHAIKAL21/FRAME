@@ -490,8 +490,16 @@ class LiveTradingWindow(QMainWindow):
         self.agent.order_closed.connect(self._on_order_closed)
         self.agent.position_updated.connect(self._on_position_updated)
         self.agent.oms_event.connect(self._on_oms_event)
-        self.agent.telemetry_updated.connect(self.journal_widget.update_telemetry)
+        self.agent.telemetry_updated.connect(self._on_telemetry_updated)
         self.agent.agent_status_changed.connect(self._on_agent_status_changed)
+
+    def _on_telemetry_updated(self, tele: dict):
+        self.journal_widget.update_telemetry(tele)
+        try:
+            executed = tele.get("action") in ["BUY", "SELL"] and float(tele.get("conf", 0.0)) >= 32.0
+            self.db.record_ai_telemetry(tele, executed=executed, source="DESKTOP")
+        except Exception:
+            pass
 
     def _on_feed_tick(self, tick: dict):
         self.last_tick = tick

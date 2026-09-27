@@ -75,16 +75,17 @@ class LiveMarketFeed(QObject):
         self.bar_duration_sec = 1800
 
         # Live candle state
+        is_btc = "BTC" in symbol.upper()
         self.current_candle: Optional[Dict[str, Any]] = None
-        self.last_bid = 4321.20
-        self.last_ask = 4321.55
+        self.last_bid = 84400.0 if is_btc else 4321.20
+        self.last_ask = round(self.last_bid + (1.5 if is_btc else 0.35), 2)
         self.last_tick_time = int(time.time())
         self.tick_count = 0
 
         # Background Yahoo poller
         self._yahoo_lock = threading.Lock()
         self._last_yahoo_poll_ts = 0
-        self._yahoo_price_cache = 4321.20
+        self._yahoo_price_cache = self.last_bid
 
         # Polling timer
         self.timer = QTimer(self)
@@ -94,6 +95,12 @@ class LiveMarketFeed(QObject):
         """Switches active trading feed symbol (e.g. XAUUSD, BTCUSD)."""
         self.symbol = symbol.upper()
         self.current_candle = None
+        is_btc = "BTC" in self.symbol
+        self.last_bid = 84400.0 if is_btc else 4321.20
+        self.last_ask = round(self.last_bid + (1.5 if is_btc else 0.35), 2)
+        with self._yahoo_lock:
+            self._yahoo_price_cache = self.last_bid
+            self._last_yahoo_poll_ts = 0
         self._connect()
 
     def _get_yahoo_ticker(self) -> str:
@@ -130,21 +137,32 @@ class LiveMarketFeed(QObject):
         if not HAS_MT5:
             return None
         is_btc = "BTC" in self.symbol.upper()
-        candidates = [self.symbol, "BTCUSD", "BTC", "BTCUSDT"] if is_btc else [self.symbol, "XAUUSD", "GOLD", "XAUUSD.m", "XAUUSDm", "XAUUSD_i"]
-        for cand in candidates:
-            s = mt5.symbol_info(cand)
-            if s is not None:
-                if not s.visible:
-                    mt5.symbol_select(cand, True)
-                return cand
-        symbols = mt5.symbols_get()
-        if symbols:
-            keyword = "BTC" if is_btc else "XAU"
-            for s in symbols:
-                if keyword in s.name.upper():
+        if is_btc:
+            candidates = ["BTCUSD", "BTCUSDT", "BTC.crypto"]
+            for cand in candidates:
+                s = mt5.symbol_info(cand)
+                if s is not None:
+                    t = mt5.symbol_info_tick(cand)
+                    if t and t.bid > 10000:
+                        if not s.visible:
+                            mt5.symbol_select(cand, True)
+                        return cand
+            return None  # Do not bind to Nasdaq stock ETFs like Mini Trust ($37)
+        else:
+            candidates = [self.symbol, "XAUUSD", "GOLD", "XAUUSD.m", "XAUUSDm", "XAUUSD_i"]
+            for cand in candidates:
+                s = mt5.symbol_info(cand)
+                if s is not None:
                     if not s.visible:
-                        mt5.symbol_select(s.name, True)
-                    return s.name
+                        mt5.symbol_select(cand, True)
+                    return cand
+            symbols = mt5.symbols_get()
+            if symbols:
+                for s in symbols:
+                    if "XAU" in s.name.upper() or "GOLD" in s.name.upper():
+                        if not s.visible:
+                            mt5.symbol_select(s.name, True)
+                        return s.name
         return None
 
     def _connect(self):
@@ -166,18 +184,22 @@ class LiveMarketFeed(QObject):
             except Exception:
                 pass
 
-        # 2. Try Global Real-Time Feed (Yahoo Finance GC=F / COMEX Gold)
+        # 2. Try Global Real-Time Feed (Yahoo Finance BTC-USD / GC=F)
         if self.active_source in ["auto", "yahoo"]:
             try:
                 p = self._fetch_yahoo_price_sync()
-                if p and p > 1000:
+                if p and p > 10.0:
+                    is_btc = "BTC" in self.symbol.upper()
                     self.last_bid = p
-                    self.last_ask = round(p + 0.35, 2)
+                    self.last_ask = round(p + (1.5 if is_btc else 0.35), 2)
+                    with self._yahoo_lock:
+                        self._yahoo_price_cache = p
                     self.mt5_initialized = False
                     self.is_connected = True
+                    ticker = self._get_yahoo_ticker()
                     self.connection_changed.emit(
-                        True, "GLOBAL REALTIME (YAHOO GC=F)",
-                        f"Live Global Gold Feed Active (${p:,.2f}) | Sub-300ms REST"
+                        True, f"GLOBAL REALTIME ({ticker})",
+                        f"Live Global {self.symbol} Feed Active (${p:,.2f}) | Sub-300ms REST"
                     )
                     self._load_initial_history()
                     return
@@ -194,7 +216,8 @@ class LiveMarketFeed(QObject):
         self._load_initial_history()
 
     def _fetch_yahoo_price_sync(self) -> Optional[float]:
-        url = "https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1m&range=1d"
+        ticker = self._get_yahoo_ticker()
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval=1m&range=1d"
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         ctx = ssl.create_default_context()
         with urllib.request.urlopen(req, timeout=3.5, context=ctx) as resp:
@@ -243,7 +266,8 @@ class LiveMarketFeed(QObject):
         # 2. Try loading historical bars from Yahoo Finance
         try:
             tf_info = TIMEFRAME_MAP.get(self.current_timeframe, TIMEFRAME_MAP["30M"])
-            url = f"https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval={tf_info['yahoo']}&range={tf_info['range']}"
+            ticker = self._get_yahoo_ticker()
+            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval={tf_info['yahoo']}&range={tf_info['range']}"
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
             ctx = ssl.create_default_context()
             with urllib.request.urlopen(req, timeout=4.0, context=ctx) as resp:
