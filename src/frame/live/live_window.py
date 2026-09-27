@@ -430,6 +430,9 @@ class LiveTradingWindow(QMainWindow):
         main_layout.addWidget(splitter)
 
     def _wire_signals(self):
+        # Chart Timeframe -> Feed & UI
+        self.chart_widget.timeframe_changed.connect(self._on_timeframe_selected)
+
         # Feed -> UI & Agent
         self.feed.tick_received.connect(self._on_feed_tick)
         self.feed.candle_updated.connect(self._on_feed_candle)
@@ -484,6 +487,10 @@ class LiveTradingWindow(QMainWindow):
                 self.agent.on_candle_closed(candle, self.recent_candles)
             else:
                 self._sync_with_cloud_server()
+
+    def _on_timeframe_selected(self, tf_str: str):
+        self.feed.set_timeframe(tf_str)
+        self.journal_widget._log_event(f"[CHART] Active view timeframe set to {tf_str} | AI strategy locked on M30")
 
     def _on_feed_connection_changed(self, is_connected: bool, source: str, msg: str):
         if is_connected:

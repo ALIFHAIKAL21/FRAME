@@ -545,44 +545,38 @@ if selected_mode == "🔴 LIVE REALTIME TRADER":
             </div>
             """, unsafe_allow_html=True)
 
-        # 3. Live Candlestick Chart (Plotly Hardware-Accelerated Dark)
-        st.markdown("#### 📈 LIVE XAU/USD REALTIME M30 CANDLESTICK STREAM")
-        # Build live chart from recent closed candles or sample price stream
-        now = time.time()
-        c_times = [datetime.fromtimestamp(now - (i * 1800), timezone.utc) for i in range(40, -1, -1)]
-        np.random.seed(42)
-        base_p = 4310.0 + np.cumsum(np.random.randn(41) * 1.5)
+                # 3. Live Candlestick Chart (Official TradingView Global Real-Time Stream)
+        st.markdown("#### ?? LIVE XAU/USD TRADINGVIEW GLOBAL REAL-TIME STREAM")
+        import streamlit.components.v1 as components
         
-        fig_live = go.Figure(data=[
-            go.Candlestick(
-                x=c_times,
-                open=base_p,
-                high=base_p + np.abs(np.random.randn(41) * 2.0),
-                low=base_p - np.abs(np.random.randn(41) * 2.0),
-                close=base_p + np.random.randn(41) * 0.8,
-                increasing_line_color='#00e676',
-                decreasing_line_color='#ff5252',
-                increasing_fillcolor='#00e676',
-                decreasing_fillcolor='#ff5252',
-                name="XAU/USD M30"
-            )
-        ])
-        
-        # Overlay order lines if active
-        if pos is not None:
-            fig_live.add_hline(y=pos['entry_price'], line_dash="dash", line_color="#38bdf8", annotation_text="ENTRY")
-            fig_live.add_hline(y=pos['current_sl'], line_dash="solid", line_color="#ff5252", annotation_text="STOP LOSS")
-            fig_live.add_hline(y=pos['current_tp'], line_dash="solid", line_color="#00e676", annotation_text="TAKE PROFIT (+2.7R)")
-
-        fig_live.update_layout(
-            height=400,
-            template="plotly_dark",
-            paper_bgcolor="#080c14",
-            plot_bgcolor="#080c14",
-            margin=dict(l=10, r=10, t=10, b=10),
-            xaxis_rangeslider_visible=False
-        )
-        st.plotly_chart(fig_live, use_container_width=True)
+        tv_cloud_html = """
+        <div class="tradingview-widget-container" style="height:520px;width:100%">
+          <div id="tv_chart_cloud" style="height:calc(100% - 32px);width:100%"></div>
+          <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+          <script type="text/javascript">
+          new TradingView.widget({
+            "autosize": true,
+            "symbol": "OANDA:XAUUSD",
+            "interval": "30",
+            "timezone": "Asia/Jakarta",
+            "theme": "dark",
+            "style": "1",
+            "locale": "en",
+            "toolbar_bg": "#080c14",
+            "enable_publishing": false,
+            "hide_top_toolbar": false,
+            "allow_symbol_change": true,
+            "container_id": "tv_chart_cloud",
+            "backgroundColor": "#080c14",
+            "gridColor": "rgba(30, 41, 59, 0.4)",
+            "hide_side_toolbar": false,
+            "withdateranges": true,
+            "hide_volume": false
+          });
+          </script>
+        </div>
+        """
+        components.html(tv_cloud_html, height=530)
 
         # 4. Tabbed Real-Time Audit Journal
         t_tab1, t_tab2, t_tab3 = st.tabs(["📋 CLOSED TRADES (DATABASE)", "🤖 AI INFERENCE MONITOR", "⚡ KINETIC OMS AUDIT LOG"])
