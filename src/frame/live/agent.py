@@ -99,6 +99,8 @@ class LiveAgent(QObject):
         self.agent_status_changed.emit(armed, status_text)
 
     def get_current_session(self, dt_utc: datetime) -> Optional[str]:
+        if "BTC" in getattr(self, "symbol", "XAUUSD").upper():
+            return "CRYPTO_24_7"
         h = dt_utc.hour + (dt_utc.minute / 60.0)
         dow = dt_utc.weekday()
 

@@ -526,12 +526,9 @@ class LiveTradingWindow(QMainWindow):
 
         # Evaluate on candle update/close
         if candle.get("is_closed", False):
-            # Anti-Collision Guard: If Cloud is online, Cloud is the Single Execution Authority!
-            # Desktop will NOT open duplicate positions to prevent double entries.
-            cloud_is_online = "[CLOUD: ONLINE" in self.lbl_cloud_status.text()
-            if not cloud_is_online:
-                self.agent.on_candle_closed(candle, self.recent_candles)
-            else:
+            # Always run AI inference & kinetic OMS on Desktop so operator has instant live telemetry!
+            self.agent.on_candle_closed(candle, self.recent_candles)
+            if hasattr(self, "cloud_client") and self.cloud_client:
                 self._sync_with_cloud_server()
 
     def _on_timeframe_selected(self, tf_str: str):
@@ -681,6 +678,7 @@ class LiveTradingWindow(QMainWindow):
         # 3. Update Trading Agent
         self.agent.set_symbol(sym)
 
+        self.position_hud.set_standby(True, symbol=disp)
         # 4. Update Radar HUD
         self.lbl_radar_pair.setText(f"?? TARGET: {'?? XAU/USD' if sym == 'XAUUSD' else '? BTC/USD'}")
         if sym == "BTCUSD":

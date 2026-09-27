@@ -138,6 +138,8 @@ class CloudLiveTraderEngine:
             pass
 
     def get_current_session(self, now_utc: datetime) -> str:
+        if "BTC" in getattr(self, "symbol", "XAUUSD").upper():
+            return "CRYPTO_24_7"
         h = now_utc.hour + now_utc.minute / 60.0
         if 7.0 <= h < 8.5: return 'BLACKOUT_PRE_LONDON'
         if 1.0 <= h < 4.0: return 'ASIA_EARLY'
@@ -256,11 +258,12 @@ class CloudLiveTraderEngine:
             if now_utc.weekday() in (5, 6):
                 return {'action': 'WEEKEND_MARKET_CLOSED', 'message': 'Forex markets closed on weekend'}
 
-        if session_name in ('OFF_SESSION', 'BLACKOUT_PRE_LONDON'):
-            return {'action': 'STANDBY_SESSION', 'session': session_name}
+        if not is_btc:
+            if session_name in ('OFF_SESSION', 'BLACKOUT_PRE_LONDON'):
+                return {'action': 'STANDBY_SESSION', 'session': session_name}
 
-        if self.last_session_traded == session_name:
-            return {'action': 'SESSION_QUOTA_FILLED', 'session': session_name, 'message': 'Max 1 trade per session'}
+            if self.last_session_traded == session_name:
+                return {'action': 'SESSION_QUOTA_FILLED', 'session': session_name, 'message': 'Max 1 trade per session'}
 
         candles = self.feed.fetch_m30_candles(limit=64)
         if len(candles) >= 14:
