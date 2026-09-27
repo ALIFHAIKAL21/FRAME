@@ -320,11 +320,18 @@ class LiveAgent(QObject):
                     logits = self.model(x)
                     probs = torch.softmax(logits, dim=-1).cpu().numpy()[0]
 
+                p_hold = float(probs[0])
                 t_probs = probs[1:]
                 max_i = int(np.argmax(t_probs))
                 conf = float(t_probs[max_i])
-                act = "BUY" if max_i in [0, 1] else "SELL"
-                return act, conf, probs
+                dir_act = "BUY" if max_i in [0, 1] else "SELL"
+                margin = conf - p_hold
+
+                # Quantitative Gating: Action is HOLD unless directional signal clears TAU_BASE and margin
+                if conf < TAU_BASE or margin < UNCERTAINTY_MARGIN:
+                    return "HOLD", p_hold, probs
+
+                return dir_act, conf, probs
             except Exception:
                 pass
 
