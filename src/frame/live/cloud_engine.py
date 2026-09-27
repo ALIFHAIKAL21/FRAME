@@ -92,6 +92,7 @@ class CloudLiveTraderEngine:
         self.broker = LivePaperBroker(initial_capital=INITIAL_EQUITY, lot_mode='flat', max_lot=0.01)
         self.last_evaluated_candle_time = 0
         self.last_session_traded = ''
+        self.is_armed = True
         self.load_state()
 
     def load_state(self):
@@ -103,6 +104,7 @@ class CloudLiveTraderEngine:
                     self.broker.open_position = state.get('open_position')
                     self.last_evaluated_candle_time = int(state.get('last_candle_time', 0))
                     self.last_session_traded = str(state.get('last_session_traded', ''))
+                    self.is_armed = bool(state.get('is_armed', True))
             except Exception:
                 pass
 
@@ -114,6 +116,7 @@ class CloudLiveTraderEngine:
                 'open_position': self.broker.open_position,
                 'last_candle_time': self.last_evaluated_candle_time,
                 'last_session_traded': self.last_session_traded,
+                'is_armed': self.is_armed,
                 'updated_at_utc': datetime.now(timezone.utc).isoformat()
             }
             with open(STATE_FILE, 'w', encoding='utf-8') as f:
@@ -131,7 +134,21 @@ class CloudLiveTraderEngine:
         if 17.5 <= h < 21.0: return 'NY_CORE'
         return 'OFF_SESSION'
 
+    def reset(self, new_capital: float = INITIAL_EQUITY):
+        self.broker.reset(new_capital)
+        self.last_evaluated_candle_time = 0
+        self.last_session_traded = ''
+        self.save_state()
+
+    def update_config(self, lot_mode: str, max_lot: float):
+        self.broker.lot_mode = lot_mode
+        self.broker.max_lot = max_lot
+        self.save_state()
+
     def step(self) -> Dict[str, Any]:
+        if not self.is_armed and self.broker.open_position is None:
+            return {'action': 'AGENT_DISARMED', 'message': 'Cloud trading engine is PAUSED/DISARMED by operator.'}
+
         now_utc = datetime.now(timezone.utc)
         events = []
         price_info = self.feed.fetch_live_price()

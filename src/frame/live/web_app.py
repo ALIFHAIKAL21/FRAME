@@ -216,34 +216,49 @@ api_mode = params.get("api")
 if api_mode:
     token = params.get("key") or params.get("cron_key") or ""
     if auth_manager.verify_cron_key(str(token)) or auth_manager.verify_session_token(str(token)):
+        cloud_eng = get_cloud_engine()
         if api_mode == "state":
             st.json({
                 "status": "online",
+                "is_armed": getattr(cloud_eng, "is_armed", True),
                 "timestamp_utc": datetime.now(timezone.utc).isoformat(),
                 "broker": {
-                    "cash": broker.cash,
-                    "initial_capital": broker.initial_capital,
-                    "lot_mode": broker.lot_mode,
-                    "max_lot": broker.max_lot,
-                    "stats": broker.get_stats(),
-                    "open_position": broker.open_position
+                    "cash": cloud_eng.broker.cash,
+                    "initial_capital": cloud_eng.broker.initial_capital,
+                    "lot_mode": cloud_eng.broker.lot_mode,
+                    "max_lot": cloud_eng.broker.max_lot,
+                    "stats": cloud_eng.broker.get_stats(),
+                    "open_position": cloud_eng.broker.open_position
                 },
                 "recent_trades": db.get_closed_trades_df(limit=30).to_dict(orient="records")
             })
             st.stop()
         elif api_mode == "panic_close":
-            if broker.open_position is not None:
-                ep = broker.open_position["entry_price"]
-                trade = broker.close_order(ep, exit_reason="Desktop Remote IPC Panic Close")
+            if cloud_eng.broker.open_position is not None:
+                ep = cloud_eng.broker.open_position["entry_price"]
+                trade = cloud_eng.broker.close_order(ep, exit_reason="Desktop Remote IPC Panic Close")
                 db.record_order_closed(trade)
+                cloud_eng.save_state()
                 st.json({"success": True, "message": "Position closed on cloud server", "trade": trade})
             else:
                 st.json({"success": False, "message": "No open position on cloud server"})
             st.stop()
+        elif api_mode == "toggle_agent":
+            armed = bool(int(params.get("armed", 1)))
+            cloud_eng.is_armed = armed
+            cloud_eng.save_state()
+            st.json({"success": True, "is_armed": cloud_eng.is_armed, "message": f"Cloud agent armed={armed}"})
+            st.stop()
         elif api_mode == "reset":
             cap = float(params.get("capital", 500.0))
-            broker.reset(cap)
+            cloud_eng.reset(cap)
             st.json({"success": True, "message": f"Cloud broker reset to ${cap}"})
+            st.stop()
+        elif api_mode == "config":
+            lot_mode = str(params.get("lot_mode", "flat"))
+            max_lot = float(params.get("max_lot", 0.01))
+            cloud_eng.update_config(lot_mode, max_lot)
+            st.json({"success": True, "message": f"Cloud config updated: lot_mode={lot_mode}, max_lot={max_lot}"})
             st.stop()
     else:
         st.json({"error": "Unauthorized desktop IPC request. Invalid key."})

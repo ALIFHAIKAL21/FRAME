@@ -83,10 +83,7 @@ class CloudServerClient:
             pass
         return None
 
-    def panic_close(self) -> bool:
-        if not self.base_url:
-            return False
-        url = f"{self.base_url}/?api=panic_close&key={urllib.parse.quote(self.secret_key)}"
+    def _send_quick_get(self, url: str) -> bool:
         try:
             import httpx
             with httpx.Client(follow_redirects=True, timeout=5.0) as client:
@@ -94,13 +91,28 @@ class CloudServerClient:
                 return resp.status_code == 200
         except Exception:
             pass
-
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "FlowdevDesktopCockpit/1.0"})
             with urllib.request.urlopen(req, timeout=4.0) as resp:
                 return resp.status == 200
         except Exception:
             return False
+
+    def panic_close(self) -> bool:
+        if not self.base_url: return False
+        return self._send_quick_get(f"{self.base_url}/?api=panic_close&key={urllib.parse.quote(self.secret_key)}")
+
+    def toggle_agent(self, armed: bool) -> bool:
+        if not self.base_url: return False
+        return self._send_quick_get(f"{self.base_url}/?api=toggle_agent&armed={1 if armed else 0}&key={urllib.parse.quote(self.secret_key)}")
+
+    def reset(self, capital: float) -> bool:
+        if not self.base_url: return False
+        return self._send_quick_get(f"{self.base_url}/?api=reset&capital={capital}&key={urllib.parse.quote(self.secret_key)}")
+
+    def update_config(self, lot_mode: str, max_lot: float) -> bool:
+        if not self.base_url: return False
+        return self._send_quick_get(f"{self.base_url}/?api=config&lot_mode={lot_mode}&max_lot={max_lot}&key={urllib.parse.quote(self.secret_key)}")
 
 class CloudSyncWorker(QObject):
     state_ready = Signal(dict)
@@ -465,7 +477,13 @@ class LiveTradingWindow(QMainWindow):
 
         # Evaluate on candle update/close
         if candle.get("is_closed", False):
-            self.agent.on_candle_closed(candle, self.recent_candles)
+            # Anti-Collision Guard: If Cloud is online, Cloud is the Single Execution Authority!
+            # Desktop will NOT open duplicate positions to prevent double entries.
+            cloud_is_online = "[CLOUD: ONLINE" in self.lbl_cloud_status.text()
+            if not cloud_is_online:
+                self.agent.on_candle_closed(candle, self.recent_candles)
+            else:
+                self._sync_with_cloud_server()
 
     def _on_feed_connection_changed(self, is_connected: bool, source: str, msg: str):
         if is_connected:
@@ -556,11 +574,22 @@ class LiveTradingWindow(QMainWindow):
         if "stats" in b_info:
             self.metrics_panel.update_metrics(b_info["stats"])
         
+        if "cash" in b_info:
+            self.broker.cash = float(b_info["cash"])
+
         pos = b_info.get("open_position")
+        self.broker.open_position = pos
         if pos:
             self.position_hud.update_position(pos)
+            sl_price = pos.get("current_sl", pos.get("sl_price", 0.0))
+            self.chart_widget.draw_order_lines(pos["direction"], pos["entry_price"], sl_price, pos["tp_price"])
         else:
             self.position_hud.set_standby(True)
+            self.chart_widget.clear_order_lines()
+
+        cloud_armed = state.get("is_armed")
+        if cloud_armed is not None and cloud_armed != self.agent.is_armed:
+            self.agent.set_armed(cloud_armed)
 
     def _on_cloud_sync_failed(self):
         self.lbl_cloud_status.setText("[DESKTOP LOCAL 🟡]")
@@ -589,6 +618,8 @@ class LiveTradingWindow(QMainWindow):
     def _toggle_agent_armed(self):
         new_state = not self.agent.is_armed
         self.agent.set_armed(new_state)
+        if hasattr(self, "cloud_client") and self.cloud_client:
+            threading.Thread(target=lambda: self.cloud_client.toggle_agent(new_state), daemon=True).start()
 
     def _on_agent_status_changed(self, armed: bool, text: str):
         if armed:
@@ -611,6 +642,8 @@ class LiveTradingWindow(QMainWindow):
     def _on_sizing_changed(self, idx: int):
         self.broker.lot_mode = "dynamic" if idx == 0 else "flat"
         self.frame_max_lot.setVisible(idx == 0)
+        if hasattr(self, "cloud_client") and self.cloud_client:
+            threading.Thread(target=lambda: self.cloud_client.update_config(self.broker.lot_mode, self.broker.max_lot), daemon=True).start()
 
     def _on_max_lot_changed(self, val: float):
         self.broker.max_lot = float(val)
@@ -639,6 +672,8 @@ class LiveTradingWindow(QMainWindow):
             self.journal_widget.tbl_trades.setRowCount(0)
             self.metrics_panel.update_metrics(self.broker.get_stats())
             self.journal_widget._log_event(f"[ACCOUNT] Full paper account reset to ${cap:,.2f} USD")
+            if hasattr(self, "cloud_client") and self.cloud_client:
+                threading.Thread(target=lambda: self.cloud_client.reset(cap), daemon=True).start()
 
     def _open_web_app(self):
         import webbrowser
