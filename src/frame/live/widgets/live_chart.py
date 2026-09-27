@@ -443,6 +443,18 @@ class LiveRealtimeChartWidget(QWidget):
             js = f"if (typeof updateCandleWithHUD === 'function') {{ updateCandleWithHUD({c_json}, {bid}, {ask}, {spd}); }}"
             self.web_view.page().runJavaScript(js)
 
+    def display_active_order(self, pos: dict):
+        """Convenience helper to draw order lines directly from a position dictionary."""
+        if not pos:
+            self.clear_order_lines()
+            return
+        direction = pos.get("direction", "BUY")
+        entry_price = float(pos.get("entry_price", 0.0))
+        sl_price = float(pos.get("current_sl", pos.get("sl_price", 0.0)))
+        tp_price = float(pos.get("current_tp", pos.get("tp_price", 0.0)))
+        lot = float(pos.get("lot", 0.01))
+        self.draw_order_lines(direction, entry_price, sl_price, tp_price, lot)
+
     def draw_order_lines(self, direction: str, entry_price: float, sl_price: float, tp_price: float, lot: float = 0.01):
         if self.chart_mode == "flowdev_oms":
             js = f"if (typeof setOrderLines === 'function') {{ setOrderLines({entry_price}, {sl_price}, {tp_price}, '{direction}', {lot}); }}"

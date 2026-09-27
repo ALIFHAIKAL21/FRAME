@@ -550,23 +550,49 @@ class LiveTradingWindow(QMainWindow):
         self.journal_widget._log_event(f"[FEED] Loaded {len(candles)} historical M30 bars to seed chart.")
 
     def _on_order_opened(self, pos: dict):
-        self.chart_widget.display_active_order(pos)
-        self.position_hud.update_position(pos, self.last_tick.get("bid", pos["entry_price"]))
-        self.journal_widget._log_event(
-            f"[ORDER OPENED] {pos['direction']} {pos['lot']:.2f}L @ ${pos['entry_price']:,.2f} | "
-            f"SL: ${pos['current_sl']:,.2f} | TP: ${pos['current_tp']:,.2f}"
-        )
-        # Record into Unified Audit Database
-        self.db.record_order_opened(pos, source="DESKTOP")
+        sl_price = float(pos.get("current_sl", pos.get("sl_price", 0.0)))
+        tp_price = float(pos.get("current_tp", pos.get("tp_price", 0.0)))
+        lot = float(pos.get("lot", 0.01))
+        ep = float(pos.get("entry_price", 0.0))
+        d = str(pos.get("direction", "BUY"))
 
+        # 1. Update Chart
+        try:
+            self.chart_widget.display_active_order(pos)
+        except Exception as e:
+            print(f"[Chart Order Error] {e}")
+
+        # 2. Update Position HUD
+        try:
+            live_p = self.last_tick.get("bid", ep) if d == "BUY" else self.last_tick.get("ask", ep)
+            self.position_hud.update_position(pos, live_p)
+        except Exception as e:
+            print(f"[HUD Order Error] {e}")
+
+        # 3. Journal Log
+        self.journal_widget._log_event(
+            f"[ORDER OPENED] {d} {lot:.2f}L @ ${ep:,.2f} | "
+            f"SL: ${sl_price:,.2f} | TP: ${tp_price:,.2f}"
+        )
+
+        # 4. Record into Unified Audit Database
+        try:
+            self.db.record_order_opened(pos, source="DESKTOP")
+        except Exception as e:
+            print(f"[DB Order Error] {e}")
+
+        # 5. Tray Notification
         if hasattr(self, "tray_icon") and self.tray_icon is not None and self.tray_icon.isVisible():
-            self.act_pos_info.setText(f"📊 Posisi: {pos['direction']} {pos['lot']:.2f}L @ ${pos['entry_price']:.2f}")
-            self.tray_icon.showMessage(
-                f"🟢 NEW TRADE OPENED: {pos['direction']}",
-                f"{pos['lot']:.2f}L @ ${pos['entry_price']:,.2f} | SL: ${pos['current_sl']:,.2f} | TP: ${pos['current_tp']:,.2f}",
-                QSystemTrayIcon.Information,
-                4000
-            )
+            try:
+                self.act_pos_info.setText(f"Posisi: {d} {lot:.2f}L @ ${ep:,.2f}")
+                self.tray_icon.showMessage(
+                    f"NEW TRADE OPENED: {d}",
+                    f"{lot:.2f}L @ ${ep:,.2f} | SL: ${sl_price:,.2f} | TP: ${tp_price:,.2f}",
+                    QSystemTrayIcon.Information,
+                    4000
+                )
+            except Exception:
+                pass
 
     def _on_order_closed(self, trade: dict):
         self.chart_widget.clear_order_lines()
