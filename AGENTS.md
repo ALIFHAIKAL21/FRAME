@@ -1,5 +1,6 @@
 ﻿# CONSTITUTION & OPERATIONAL PROTOCOL: XAU_DEEP_SNIPER
 # Dedicated Quantitative Deep Learning System for XAU/USD (Gold) M30
+# fokus pada folder proyek xau_deep_sniper (tidak yang lain)
 
 ## 1. Core Mission & Identity
 Repository ini adalah lingkungan riset kuantitatif murni (pure quantitative research environment) tingkat institusional untuk membangun model Deep Learning / Foundation Time-Series Model (MOMENT-1-large) khusus instrumen XAU/USD pada timeframe 30-Menit (M30).
