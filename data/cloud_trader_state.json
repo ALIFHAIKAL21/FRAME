@@ -1,11 +1,11 @@
 {
   "cash": 250.0,
   "open_position": null,
-  "last_candle_time": 0,
+  "last_candle_time": 1790597701,
   "last_session_traded": "",
   "is_armed": true,
-  "symbol": "BTCUSD",
-  "lot_mode": "dynamic",
+  "symbol": "XAUUSD",
+  "lot_mode": "flat",
   "max_lot": 2.0,
-  "updated_at_utc": "2026-09-28T00:50:00Z"
+  "updated_at_utc": "2026-09-28T12:25:05.229860+00:00"
 }

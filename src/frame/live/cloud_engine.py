@@ -99,7 +99,7 @@ class CloudLiveTraderEngine:
         self.db = TradeAuditDB(_ROOT / 'data' / 'flowdev_trade_audit.db')
         self.telegram = LiveTelegramNotifier()
         self.broker = LivePaperBroker(initial_capital=INITIAL_EQUITY, lot_mode='flat', max_lot=0.01)
-        self.symbol = "BTCUSD"
+        self.symbol = "XAUUSD"
         self.last_evaluated_candle_time = 0
         self.last_session_traded = ''
         self.is_armed = True

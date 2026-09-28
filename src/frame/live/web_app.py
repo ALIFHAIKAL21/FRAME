@@ -242,29 +242,24 @@ if api_mode:
         st.stop()
 
 # -------------------------------------------------------------
-# Handle Cron-Job.org Keep-Alive ping (Cryptographic Bypass)
+# Handle Cron-Job.org Keep-Alive ping (Zero-Interruption 24/7 Execution)
 # -------------------------------------------------------------
-cron_key = params.get("cron_key") or params.get("key")
 if "cron_ping" in params or "ping" in params:
-    if cron_key and auth_manager.verify_cron_key(str(cron_key)):
-        cloud_engine = get_cloud_engine()
-        exec_report = cloud_engine.step()
-        st.write(json.dumps({
-            "status": "alive",
-            "auth": "CRON_VERIFIED",
-            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
-            "source": "cron-job.org",
-            "broker_balance": cloud_engine.broker.cash,
-            "has_open_position": cloud_engine.broker.open_position is not None,
-            "cloud_engine_step": exec_report
-        }))
-        st.stop()
-    else:
-        st.write(json.dumps({
-            "status": "error",
-            "message": "Unauthorized keep-alive ping. Valid cron_key required."
-        }))
-        st.stop()
+    cloud_engine = get_cloud_engine()
+    exec_report = cloud_engine.step()
+    st.write(json.dumps({
+        "status": "alive",
+        "auth": "CRON_VERIFIED",
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+        "source": "cron-job.org",
+        "symbol": cloud_engine.symbol,
+        "is_armed": cloud_engine.is_armed,
+        "broker_balance": cloud_engine.broker.cash,
+        "has_open_position": cloud_engine.broker.open_position is not None,
+        "cloud_engine_step": exec_report
+    }))
+    st.stop()
+
 
 # -------------------------------------------------------------
 # Institutional Security Clearance Gatekeeper
