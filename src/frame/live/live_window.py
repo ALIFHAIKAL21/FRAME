@@ -135,6 +135,20 @@ class CloudSyncWorker(QObject):
 
         def _worker():
             try:
+                # 1. Primary: Direct high-speed sync from Neon Cloud Database
+                parent_win = self.parent()
+                if parent_win and hasattr(parent_win, "db"):
+                    db_state = parent_win.db.get_operational_state("GLOBAL_STATE")
+                    if db_state and isinstance(db_state, dict):
+                        db_state["status"] = "online"
+                        db_state["broker"] = {
+                            "cash": float(db_state.get("cash", 250.0)),
+                            "open_position": db_state.get("open_position")
+                        }
+                        self.state_ready.emit(db_state)
+                        return
+
+                # 2. Secondary: Fallback to HTTP client
                 state = self.client.fetch_state()
                 if state and state.get("status") == "online":
                     self.state_ready.emit(state)
@@ -823,36 +837,44 @@ class LiveTradingWindow(QMainWindow):
         self.historical_win.activateWindow()
 
     def _persist_current_state(self):
-        """Saves current desktop operational state to data/cloud_trader_state.json."""
+        """Saves current desktop operational state to Neon Cloud PostgreSQL and local file."""
         try:
-            state_file = pathlib.Path(r"c:\Ngoding\xau_deep_sniper\data\cloud_trader_state.json")
-            state_file.parent.mkdir(parents=True, exist_ok=True)
             state_data = {
                 "cash": float(self.broker.cash),
                 "open_position": self.broker.open_position,
                 "last_candle_time": getattr(self.agent, "last_evaluated_bar_time", 0),
                 "last_session_traded": getattr(self.agent, "last_session_traded", ""),
                 "is_armed": bool(self.agent.is_armed),
-                "symbol": getattr(self, "current_symbol", "BTCUSD"),
+                "symbol": getattr(self, "current_symbol", "XAUUSD"),
                 "lot_mode": getattr(self.broker, "lot_mode", "dynamic"),
                 "max_lot": getattr(self.broker, "max_lot", 2.0),
                 "updated_at_utc": datetime.now(timezone.utc).isoformat()
             }
+            # 1. Primary: Save to Neon Cloud Database
+            self.db.save_operational_state(state_data, "GLOBAL_STATE")
+
+            # 2. Local disk backup
+            state_file = pathlib.Path(r"c:\Ngoding\xau_deep_sniper\data\cloud_trader_state.json")
+            state_file.parent.mkdir(parents=True, exist_ok=True)
             with open(state_file, "w", encoding="utf-8") as f:
                 json.dump(state_data, f, indent=2, default=str)
         except Exception as e:
             print(f"[Persist State Error] {e}")
 
     def _load_persisted_state(self):
-        """Restores persisted operational state on Desktop startup (Auto-Recovery)."""
-        state_file = pathlib.Path(r"c:\Ngoding\xau_deep_sniper\data\cloud_trader_state.json")
-        state_data = None
-        if state_file.exists():
-            try:
-                with open(state_file, "r", encoding="utf-8") as f:
-                    state_data = json.load(f)
-            except Exception:
-                pass
+        """Restores persisted operational state on Desktop startup (Auto-Recovery from Neon DB)."""
+        # 1. Primary: Load from Neon Cloud PostgreSQL
+        state_data = self.db.get_operational_state("GLOBAL_STATE")
+
+        # 2. Fallback: Local JSON file
+        if not state_data:
+            state_file = pathlib.Path(r"c:\Ngoding\xau_deep_sniper\data\cloud_trader_state.json")
+            if state_file.exists():
+                try:
+                    with open(state_file, "r", encoding="utf-8") as f:
+                        state_data = json.load(f)
+                except Exception:
+                    pass
 
         if not state_data:
             try:

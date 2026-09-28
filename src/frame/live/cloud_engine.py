@@ -106,6 +106,19 @@ class CloudLiveTraderEngine:
         self.load_state()
 
     def load_state(self):
+        # 1. Primary: Load from Neon Cloud PostgreSQL
+        db_state = self.db.get_operational_state("GLOBAL_STATE")
+        if db_state and isinstance(db_state, dict):
+            self.broker.cash = float(db_state.get('cash', INITIAL_EQUITY))
+            self.broker.open_position = db_state.get('open_position')
+            self.last_evaluated_candle_time = int(db_state.get('last_candle_time', 0))
+            self.last_session_traded = str(db_state.get('last_session_traded', ''))
+            self.is_armed = bool(db_state.get('is_armed', True))
+            self.symbol = str(db_state.get('symbol', 'XAUUSD'))
+            self.feed.set_symbol(self.symbol)
+            return
+
+        # 2. Fallback: Local STATE_FILE
         if STATE_FILE.exists():
             try:
                 with open(STATE_FILE, 'r', encoding='utf-8') as f:
@@ -121,17 +134,21 @@ class CloudLiveTraderEngine:
                 pass
 
     def save_state(self):
+        state = {
+            'cash': self.broker.cash,
+            'open_position': self.broker.open_position,
+            'last_candle_time': self.last_evaluated_candle_time,
+            'last_session_traded': self.last_session_traded,
+            'is_armed': self.is_armed,
+            'symbol': self.symbol,
+            'updated_at_utc': datetime.now(timezone.utc).isoformat()
+        }
+        # 1. Primary: Save to Neon Cloud PostgreSQL (Realtime sync)
+        self.db.save_operational_state(state, "GLOBAL_STATE")
+
+        # 2. Secondary: Local disk backup
         STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
         try:
-            state = {
-                'cash': self.broker.cash,
-                'open_position': self.broker.open_position,
-                'last_candle_time': self.last_evaluated_candle_time,
-                'last_session_traded': self.last_session_traded,
-                'is_armed': self.is_armed,
-                'symbol': self.symbol,
-                'updated_at_utc': datetime.now(timezone.utc).isoformat()
-            }
             with open(STATE_FILE, 'w', encoding='utf-8') as f:
                 json.dump(state, f, indent=2, default=str)
         except Exception:
