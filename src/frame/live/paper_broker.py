@@ -14,11 +14,12 @@ from src.frame.constants import (
 )
 
 class LivePaperBroker:
-    def __init__(self, initial_capital: float = 500.0, lot_mode: str = "flat", max_lot: float = 2.0):
+    def __init__(self, initial_capital: float = 500.0, lot_mode: str = "flat", max_lot: float = 2.0, session_id: str = "SESSION_DEFAULT"):
         self.initial_capital = float(initial_capital)
         self.cash = float(initial_capital)
         self.lot_mode = lot_mode  # "flat" or "dynamic"
         self.max_lot = float(max_lot)
+        self.session_id = str(session_id)
         
         # Open position: only 1 concurrent position allowed by contract
         self.open_position: Optional[Dict[str, Any]] = None
@@ -56,7 +57,9 @@ class LivePaperBroker:
         current_ask: float,
         sl_dist: float,
         timestamp: Optional[datetime] = None,
-        reason: str = "Signal"
+        reason: str = "Signal",
+        atr_val: float = 20.0,  # ATR passed from agent for Dynamic TP calculation
+        dyn_tp_r: Optional[float] = None  # Trend-regime adaptive TP ratio (1.4R trend, 1.0R chop)
     ) -> Dict[str, Any]:
         if self.open_position is not None:
             raise RuntimeError("Cannot open order: a position is already active.")
@@ -64,21 +67,33 @@ class LivePaperBroker:
         lot = self.calculate_lot()
         friction = self.calculate_friction(lot)
         
+        # [F5] Dynamic TP: Trend-Regime Adaptive (1.4R trend, 1.0R chop, 2.7R normal)
+        if dyn_tp_r is None:
+            ATR_TP_THRESHOLD = 18.0
+            dyn_tp_r = 1.0 if atr_val < ATR_TP_THRESHOLD else 2.7
+
         # Execution price includes half slippage + actual spread
         if direction.upper() == "BUY":
             entry_price = round(current_ask + (SLIPPAGE_PIPS * 0.10), 2)
             sl_price = round(entry_price - sl_dist, 2)
-            tp_price = round(entry_price + (2.7 * sl_dist), 2)
+            tp_price = round(entry_price + (dyn_tp_r * sl_dist), 2)
             be_trigger = round(entry_price + (0.75 * sl_dist), 2)
         else: # SELL
             entry_price = round(current_bid - (SLIPPAGE_PIPS * 0.10), 2)
             sl_price = round(entry_price + sl_dist, 2)
-            tp_price = round(entry_price - (2.7 * sl_dist), 2)
+            tp_price = round(entry_price - (dyn_tp_r * sl_dist), 2)
             be_trigger = round(entry_price - (0.75 * sl_dist), 2)
 
         now = timestamp or datetime.now(timezone.utc)
+        if "MODEL_A" in self.session_id:
+            order_prefix = "MODA"
+        elif "MODEL_B" in self.session_id:
+            order_prefix = "MODB"
+        else:
+            order_prefix = self.session_id.replace("SESSION_", "").replace("MODEL_", "")[:4].upper()
         self.open_position = {
-            "id": f"ORD-{int(time.time()*1000)%1000000}",
+            "id": f"{order_prefix}-{int(time.time()*1000)%1000000}",
+            "session_id": self.session_id,
             "direction": direction.upper(),
             "lot": lot,
             "entry_price": entry_price,
@@ -196,6 +211,7 @@ class LivePaperBroker:
 
         trade = {
             "id": pos["id"],
+            "session_id": self.session_id,
             "direction": d,
             "lot": lot,
             "entry_price": ep,
@@ -240,7 +256,8 @@ class LivePaperBroker:
         
         net_profit = round(equity - self.initial_capital, 2)
         ret_pct = round((net_profit / self.initial_capital) * 100, 2)
-        max_dd = round(((self.peak_equity - equity) / self.peak_equity * 100), 2) if self.peak_equity > 0 else 0.0
+        peak = max(self.peak_equity, equity)
+        max_dd = round(((peak - equity) / peak * 100), 2) if peak > 0 else 0.0
         
         return {
             "initial_capital": self.initial_capital,

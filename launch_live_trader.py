@@ -11,7 +11,7 @@ current_dir = pathlib.Path(__file__).resolve().parent
 if str(current_dir) not in sys.path:
     sys.path.insert(0, str(current_dir))
 
-from src.frame.live.live_window import run_live_app
+from src.frame.gui.frame_cockpit import run_frame_app
 
 if __name__ == "__main__":
-    run_live_app()
+    run_frame_app()

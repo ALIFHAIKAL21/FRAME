@@ -6,9 +6,16 @@ Stage 2: Smart Ratchet (+1.2R / Lock 0.5R)
 Stage 3: Dynamic Trailing Stop (+1.5R+)
 Stage 4: Stale Decay (Bar 6 / -0.45R)
 Ceiling: Max TP (+2.7R) & Time Barrier (12 Bars / 6h)
+
+Forensic Fixes (v2 Final - Sweep-Validated, identical to BacktestWorker):
+F3: Dynamic TAU  -- Raise TAU_BASE +4pp when ATR(14) < 13 pip.
+                   Effect: PF 1.33->1.37, DD 25.7%->24.6%, WR 54.2%->55.9%.
+F4: Anti-BE-Trap -- Disable Stage 1 BE when ATR(14) < 10 pip.
+                   Effect: Net PnL +$709->+$727, Problem-month PnL +$168->+$213.
+Note: F1 (ATR gate) and F2 (Asia Late BL) rejected by sweep (negative impact on global PnL).
 """
 
-import time, math, pathlib
+import time, math, pathlib, threading
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 import numpy as np
@@ -45,6 +52,8 @@ from src.frame.constants import (
 )
 from .paper_broker import LivePaperBroker
 
+_MODEL_LOAD_LOCK = threading.Lock()
+
 class LiveAgent(QObject):
     order_opened = Signal(dict)
     order_closed = Signal(dict)
@@ -53,45 +62,71 @@ class LiveAgent(QObject):
     telemetry_updated = Signal(dict)
     agent_status_changed = Signal(bool, str)
 
-    def __init__(self, broker: LivePaperBroker, parent=None):
+    def __init__(
+        self,
+        broker: LivePaperBroker,
+        model_choice: str = "pretrained",
+        session_id: str = "MODEL_B_MOMENT",
+        session_name: str = "MOMENT Locked Final",
+        parent=None
+    ):
         super().__init__(parent)
         self.broker = broker
+        self.model_choice = model_choice  # "pretrained" (MOMENT-1-large Locked) or "legacy" (Baseline V1)
+        self.session_id = session_id
+        self.session_name = session_name
         self.symbol = "XAUUSD"
         self.is_armed = False  # Start in safe STANDBY by default (requires operator to toggle start)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu") if torch is not None else "cpu"
         self.model = None
         self.last_evaluated_bar_time = 0
         self.last_session_traded = ""
+        self.daily_losses = 0
+        self.current_trading_day = None
+        self.order_closed.connect(self._on_order_closed_loss_tracker)
         
-        # Load MOMENT PyTorch model
-        self._load_model()
+        # Defer heavy PyTorch model loading to background thread (prevents GUI freeze)
+        threading.Thread(target=self._load_model, daemon=True).start()
+
+    def _on_order_closed_loss_tracker(self, trade: dict):
+        if trade.get("win", 0) == 0:
+            self.daily_losses = getattr(self, "daily_losses", 0) + 1
 
     def _load_model(self):
         if torch is None:
             self.model = None
             return
-        try:
-            repo_root = pathlib.Path(__file__).resolve().parent.parent.parent.parent
-            ckpt_path = repo_root / "checkpoints" / "best_moment_15ch_lora.pt"
-            model_code_path = repo_root / "src" / "models" / "moment_model.py"
-            if ckpt_path.exists() and model_code_path.exists():
-                import importlib.util, sys
-                spec = importlib.util.spec_from_file_location("src.models.moment_model", model_code_path)
-                mod = importlib.util.module_from_spec(spec)
-                sys.modules["src.models.moment_model"] = mod
-                spec.loader.exec_module(mod)
-
-                ckpt = torch.load(ckpt_path, map_location=self.device, weights_only=False)
-                model_cfg = ckpt.get("config", None) or mod.MOMENTConfig(
-                    n_channels=15, seq_len=64, patch_len=8, patch_stride=8,
-                    d_model=1024, num_layers=6, num_heads=16, d_ff=2816,
-                    dropout=0.2, num_classes=5, use_lora=True, lora_r=32, lora_alpha=64
-                )
-                self.model = mod.MOMENTClassifier(model_cfg).to(self.device)
-                self.model.load_state_dict(ckpt["model_state_dict"])
-                self.model.eval()
-        except Exception as e:
-            self.model = None
+        with _MODEL_LOAD_LOCK:
+            try:
+                repo_root = pathlib.Path(__file__).resolve().parent.parent.parent.parent
+                if self.model_choice == "pretrained":
+                    ckpt_path = repo_root / "checkpoints" / "best_moment_15ch_pretrained_lora.pt"
+                    if ckpt_path.exists():
+                        from scripts.train_moment_15ch_pretrained import PretrainedMOMENT15ch
+                        model = PretrainedMOMENT15ch().to(self.device)
+                        ckpt = torch.load(ckpt_path, map_location=self.device, weights_only=False)
+                        model.load_state_dict(ckpt["model_state_dict"])
+                        model.eval()
+                        self.model = model
+                        print(f"[LiveAgent {self.session_id}] Pretrained MOMENT-1-large Model loaded on {self.device}.")
+                else:
+                    ckpt_path = repo_root / "checkpoints" / "best_moment_15ch_lora.pt"
+                    if ckpt_path.exists():
+                        from src.models.moment_model import MOMENTClassifier, MOMENTConfig
+                        ckpt = torch.load(ckpt_path, map_location=self.device, weights_only=False)
+                        model_cfg = ckpt.get("config", None) or MOMENTConfig(
+                            n_channels=15, seq_len=64, patch_len=8, patch_stride=8,
+                            d_model=1024, num_layers=6, num_heads=16, d_ff=2816,
+                            dropout=0.2, num_classes=5, use_lora=True, lora_r=32, lora_alpha=64
+                        )
+                        model = MOMENTClassifier(model_cfg).to(self.device)
+                        model.load_state_dict(ckpt["model_state_dict"])
+                        model.eval()
+                        self.model = model
+                        print(f"[LiveAgent {self.session_id}] Legacy Baseline Model loaded on {self.device}.")
+            except Exception as e:
+                print(f"[LiveAgent {self.session_id}] Model load error ({self.model_choice}): {e}")
+                self.model = None
 
     def set_symbol(self, symbol: str):
         self.symbol = symbol.upper()
@@ -117,7 +152,7 @@ class LiveAgent(QObject):
         if dow in [5, 6]:
             return None
 
-        # Pre-London blackout
+        # Pre-London blackout (07:00-08:30 UTC)
         if BLACKOUT_PRE_LONDON_START_UTC <= h < BLACKOUT_PRE_LONDON_END_UTC:
             return None
 
@@ -158,8 +193,14 @@ class LiveAgent(QObject):
         cur_price = bid if d == "BUY" else ask
         r_gain = (cur_price - ep) / sl_dist if d == "BUY" else (ep - cur_price) / sl_dist
 
+        # Physical wall-clock protection to ensure bars_held never desyncs
+        open_ts = pos.get("open_timestamp", time.time())
+        elapsed_hours = (time.time() - open_ts) / 3600.0
+
         # Stage 1: Positive Micro-Breakeven (+0.75R)
-        if not pos["be_activated"] and r_gain >= BE_TRIGGER_R:
+        # [F4] Skip BE if position was tagged be_force_disabled (low-ATR anti-trap)
+        be_force_disabled = pos.get("be_force_disabled", False)
+        if not pos["be_activated"] and not be_force_disabled and r_gain >= BE_TRIGGER_R:
             pos["be_activated"] = True
             new_sl = round(ep + BE_BUFFER_PRICE, 2) if d == "BUY" else round(ep - BE_BUFFER_PRICE, 2)
             pos["current_sl"] = max(pos["current_sl"], new_sl) if d == "BUY" else min(pos["current_sl"], new_sl)
@@ -181,18 +222,18 @@ class LiveAgent(QObject):
                 pos["trail_activated"] = True
                 self.oms_event.emit("Stage 3: Trailing Stop", f"Peak ${peak:.2f} -> Trailing SL updated", pos["current_sl"])
 
-        # Stage 4: Stale Decay at Bar 6 (-0.45R)
-        if pos["bars_held"] >= STALE_DECAY_BARS and not pos["be_activated"] and not pos["stale_decay_activated"]:
+        # Stage 4: Stale Decay at Bar 6 (-0.45R / 3 hours)
+        if (pos["bars_held"] >= STALE_DECAY_BARS or elapsed_hours >= 3.0) and not pos["be_activated"] and not pos["stale_decay_activated"]:
             pos["stale_decay_activated"] = True
             new_sl = round(ep - (STALE_DECAY_R * sl_dist), 2) if d == "BUY" else round(ep + (STALE_DECAY_R * sl_dist), 2)
             pos["current_sl"] = new_sl
-            self.oms_event.emit("Stage 4: Stale Decay", f"Bar {pos['bars_held']} stale -> Cut SL to -0.45R (55% risk reduction)", pos["current_sl"])
+            self.oms_event.emit("Stage 4: Stale Decay", f"Bar {pos['bars_held']} ({elapsed_hours:.1f}h) stale -> Cut SL to -0.45R (55% risk reduction)", pos["current_sl"])
 
-        # Hard Time Barrier (12 bars / 6h)
-        if pos["bars_held"] >= TIME_BARRIER_BARS:
+        # Hard Time Barrier (12 bars / 6 hours)
+        if pos["bars_held"] >= TIME_BARRIER_BARS or elapsed_hours >= 6.0:
             trade = self.broker.close_order(cur_price, exit_reason="Time Barrier (6h)")
             self.order_closed.emit(trade)
-            self.oms_event.emit("Time Barrier", "Max 12 bars (6 hours) reached. Closed position.", cur_price)
+            self.oms_event.emit("Time Barrier", f"Max hold reached ({pos['bars_held']} bars / {elapsed_hours:.1f}h). Closed position.", cur_price)
 
     def on_candle_closed(self, candle: dict, recent_candles: List[dict]):
         if not self.is_armed:
@@ -203,10 +244,13 @@ class LiveAgent(QObject):
             return
         self.last_evaluated_bar_time = c_time
 
-        # Update bars_held for active position
+        # Update bars_held for active position on true M30 bar close
         pos = self.broker.open_position
         if pos is not None:
             pos["bars_held"] += 1
+            open_ts = pos.get("open_timestamp")
+            if open_ts:
+                pos["bars_held"] = max(pos["bars_held"], int((time.time() - open_ts) / 1800.0) + 1)
             self.position_updated.emit(pos)
 
         # If already in trade, do not scan for new entry (1 concurrent trade allowed)
@@ -247,6 +291,9 @@ class LiveAgent(QObject):
         action, conf, probs = self._infer_signal(recent_candles)
         
         telemetry = {
+            "session_id": self.session_id,
+            "session_name": self.session_name,
+            "model_choice": self.model_choice,
             "time": dt_utc.strftime("%Y-%m-%d %H:%M:%S UTC"),
             "session": cur_session,
             "atr": round(atr_val, 2),
@@ -261,18 +308,72 @@ class LiveAgent(QObject):
         p_hold = probs[0] if probs is not None else 0.5
         margin = conf - p_hold
 
-        if action in ["BUY", "SELL"] and conf >= TAU_BASE and margin >= UNCERTAINTY_MARGIN:
+        # Daily Circuit Breaker: Reset on new UTC day
+        cur_day = dt_utc.strftime("%Y%m%d")
+        if cur_day != getattr(self, "current_trading_day", None):
+            self.current_trading_day = cur_day
+            self.daily_losses = 0
+
+        # Model-Specific Gating
+        if self.model_choice == "pretrained":
+            # [LOCKED FINAL MODEL B RULES]
+            # 1. Daily Circuit Breaker: Halt new entries if 2 Stop Losses have occurred today
+            if getattr(self, "daily_losses", 0) >= 2:
+                return
+
+            # 2. [F3] Dynamic TAU -- sweep-validated optimal: ATR < 13 pip (+4pp)
+            ATR_F3_THRESHOLD = 13.0
+            effective_tau = TAU_BASE + 0.04 if atr_val < ATR_F3_THRESHOLD else TAU_BASE
+
+            # 3. [F6] High-Volatility Conviction Gate -- ATR >= 20 pip
+            if atr_val >= 20.0 and margin < 0.18:
+                return
+
+            # 4. [F7] Extreme Volatility Circuit Breaker -- ATR > 65.0 pip
+            if atr_val > 65.0:
+                return
+
+            # 5. [F4] Anti-BE-Trap -- ATR < 10 pip
+            ATR_F4_BE_GATE = 10.0
+            be_enabled = (atr_val >= ATR_F4_BE_GATE)
+
+            # 6. [F5] Dynamic TP: 1.0R when ATR < 18 pip, 2.7R otherwise
+            dyn_tp_r = 1.0 if atr_val < 18.0 else 2.7
+        else:
+            # [BASELINE MODEL A RULES - LEGACY V1]
+            effective_tau = TAU_BASE
+            be_enabled = True
+            dyn_tp_r = 2.7
+
+        if action in ["BUY", "SELL"] and conf >= effective_tau and margin >= UNCERTAINTY_MARGIN:
             last_c = recent_candles[-1]
+            
+            # Macro Trend Gate: Strictly align with EMA200
+            all_closes = [c["close"] for c in recent_candles]
+            if len(all_closes) >= 50:
+                ema200_val = pd.Series(all_closes).ewm(span=min(200, len(all_closes)), adjust=False).mean().iloc[-1]
+                if action == "BUY" and last_c["close"] < ema200_val:
+                    return
+                if action == "SELL" and last_c["close"] > ema200_val:
+                    return
+
             bid = last_c["close"]
             ask = round(bid + 0.35, 2)
+
+            model_tag = "MOMENT-PRETRAINED (LOCKED)" if self.model_choice == "pretrained" else "BASELINE-V1 (LEGACY)"
             new_pos = self.broker.open_order(
                 direction=action,
                 current_bid=bid,
                 current_ask=ask,
                 sl_dist=sl_dist,
                 timestamp=dt_utc,
-                reason=f"MOMENT {action} ({conf*100:.1f}%)"
+                reason=f"[{model_tag}] {action} ({conf*100:.1f}%) | ATR={atr_val:.1f} | TP={dyn_tp_r:.1f}R | BE={'ON' if be_enabled else 'OFF'}",
+                atr_val=atr_val,
+                dyn_tp_r=dyn_tp_r
             )
+            # Tag position with be_enabled flag for Stage 1 OMS gate
+            if new_pos and be_enabled is False:
+                new_pos["be_force_disabled"] = True
             self.last_session_traded = cur_session
             self.order_opened.emit(new_pos)
 

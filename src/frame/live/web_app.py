@@ -561,6 +561,22 @@ if selected_mode == "🔴 LIVE REALTIME TRADER":
                 # 3. Live Candlestick Chart (Official TradingView Global Real-Time Stream)
         active_tv_sym = "BINANCE:BTCUSDT" if "BTC" in getattr(cloud_eng, "symbol", "BTCUSD") else "OANDA:XAUUSD"
         st.markdown(f"#### LIVE {cloud_eng.symbol} TRADINGVIEW GLOBAL REAL-TIME STREAM")
+        if pos is not None:
+            dir_badge_color = "#1d4ed8" if pos['direction'] == "BUY" else "#ea580c"
+            dir_badge_text = "#93c5fd" if pos['direction'] == "BUY" else "#fdba74"
+            st.markdown(f"""
+            <div style="background-color: #0b0f19; border: 1px solid #1e293b; border-radius: 4px; padding: 6px 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; font-family: monospace; font-size: 11px;">
+                <div>
+                    <span style="background-color: {dir_badge_color}; color: {dir_badge_text}; font-weight: 800; padding: 2px 6px; border-radius: 2px;">{pos['direction']} {pos['lot']:.2f}L</span>
+                    &nbsp;&nbsp;<b>ENTRY:</b> ${pos['entry_price']:.2f}
+                    &nbsp;&nbsp;|&nbsp;&nbsp;<b style="color: #ff5252;">SL:</b> ${pos['current_sl']:.2f} (-${abs(pos['entry_price']-pos['current_sl']):.2f})
+                    &nbsp;&nbsp;|&nbsp;&nbsp;<b style="color: #00e676;">TP (+2.7R):</b> ${pos['current_tp']:.2f} (+${abs(pos['current_tp']-pos['entry_price']):.2f})
+                </div>
+                <div>
+                    <span style="color: #38bdf8; font-weight: 700;">STAGE: {pos.get('kinetic_stage', 'STAGE_0_INITIAL_PROTECTION')}</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
         import streamlit.components.v1 as components
         
         tv_cloud_html = f"""
@@ -596,11 +612,15 @@ if selected_mode == "🔴 LIVE REALTIME TRADER":
         t_tab1, t_tab2, t_tab3 = st.tabs(["📋 CLOSED TRADES (DATABASE)", "🤖 AI INFERENCE MONITOR", "⚡ KINETIC OMS AUDIT LOG"])
         
         with t_tab1:
-            df_trades = db.get_closed_trades_df(limit=50)
+            col_t1, col_t2 = st.columns([3, 1])
+            sel_sess_log = col_t2.selectbox("Filter Sesi:", ["Semua Sesi", "🟢 Model B (Locked)", "🔵 Model A (Legacy)"], key="trade_log_sess")
+            sess_filter = "MODEL_B_MOMENT" if "Model B" in sel_sess_log else ("MODEL_A_LEGACY" if "Model A" in sel_sess_log else None)
+            df_trades = db.get_closed_trades_df(limit=50, session_id=sess_filter)
             if not df_trades.empty:
-                st.dataframe(df_trades[["id", "trade_id", "direction", "lot_size", "entry_price", "exit_price", "net_pnl", "balance_after", "exit_reason", "close_time"]], use_container_width=True)
+                display_cols = [c for c in ["id", "trade_id", "source", "direction", "lot_size", "entry_price", "exit_price", "net_pnl", "balance_after", "exit_reason", "close_time"] if c in df_trades.columns]
+                st.dataframe(df_trades[display_cols], use_container_width=True)
             else:
-                st.info("Belum ada closed trade live di database. Bot sedang memantau pasar.")
+                st.info("Belum ada closed trade live di database untuk sesi ini. Bot sedang memantau pasar.")
 
         with t_tab2:
             df_tele = db.get_recent_telemetry_df(limit=30)
@@ -621,12 +641,22 @@ elif selected_mode == "📊 EVALUASI LIVE TRADES (DATABASE AUDIT)":
     st.markdown("### 📊 LIVE REAL-TIME PERFORMANCE EVALUATION (DATABASE AUDIT)")
     st.caption("Evaluasi profesional hasil trade real-time yang tersimpan di SQLite Database dengan visualisasi identik seperti backtest.")
 
-    c_f1, c_f2, c_f3 = st.columns([1, 1, 2])
+    c_f1, c_f2, c_f3 = st.columns([1.2, 1, 1.8])
     eval_scope = c_f1.selectbox("Filter Periode Evaluasi:", ["All Time (Semua Trade)", "Hari Ini (Today)", "Bulan Ini (Current Month)", "Custom Range"])
-    eval_cap = c_f2.number_input("Modal Acuan Evaluasi ($):", min_value=100.0, value=500.0, step=50.0)
+    eval_cap = c_f2.number_input("Modal Acuan Evaluasi ($):", min_value=50.0, value=250.0, step=50.0)
+    sess_choice = c_f3.selectbox("Filter Sesi Model:", [
+        "Semua Sesi (Combined Audit)",
+        "🟢 Sesi Model B: MOMENT-1-large (Locked Final)",
+        "🔵 Sesi Model A: Baseline V1 (Legacy Model)"
+    ])
+    sess_id_filter = None
+    if "Model B" in sess_choice:
+        sess_id_filter = "MODEL_B_MOMENT"
+    elif "Model A" in sess_choice:
+        sess_id_filter = "MODEL_A_LEGACY"
 
     # Pull evaluation package from DB
-    eval_data = db.get_live_trades_evaluation(initial_capital=eval_cap)
+    eval_data = db.get_live_trades_evaluation(initial_capital=eval_cap, session_id=sess_id_filter)
 
     if not eval_data.get("has_data", False):
         st.warning("⚠️ Belum ada closed trades yang tersimpan di database untuk dievaluasi. Silakan biarkan Live Trader berjalan atau jalankan simulasi trade.")

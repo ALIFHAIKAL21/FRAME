@@ -26,16 +26,17 @@ class LivePositionHUD(QFrame):
         self.setObjectName("pos_hud")
         self.setStyleSheet("""
             #pos_hud {
-                background-color: #0b0f17;
-                border: 1px solid #1a2233;
+                background-color: #070707;
+                border: 1px solid #202020;
                 border-radius: 4px;
                 padding: 6px;
             }
         """)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 8, 10, 8)
-        layout.setSpacing(6)
+        layout.setContentsMargins(8, 4, 8, 4)
+        layout.setSpacing(3)
+        self.setMaximumHeight(58)
 
         # 1. Standby / Empty Bar
         self.frame_standby = QFrame()
@@ -123,7 +124,7 @@ class LivePositionHUD(QFrame):
         if is_standby:
             self.lbl_standby.setText(f'STANDBY // AGENT ACTIVELY SCANNING {symbol} FOR INSTITUTIONAL SETUP...')
 
-    def update_position(self, pos: dict, live_price: float):
+    def update_position(self, pos: dict, live_price: float = 0.0):
         self.set_standby(False)
         d = pos.get("direction", "BUY")
         lot = pos.get("lot", 0.01)

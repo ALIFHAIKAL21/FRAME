@@ -1,4 +1,4 @@
-﻿"""
+"""
 FLOWDEV FRAME - Real-Time Low-Latency Market Data Feed
 Streams live XAU/USD market ticks and multi-timeframe candles directly into the trading agent.
 Primary source: Native MetaTrader 5 Broker IPC (0ms latency).
@@ -64,6 +64,11 @@ class LiveMarketFeed(QObject):
     connection_changed = Signal(bool, str, str)  # is_connected, source, msg
     history_loaded = Signal(list)                # list of initial candles
 
+    # ── INDEPENDENT M30 AGGREGATOR (LOCKED — never affected by chart timeframe) ──
+    m30_candle_closed = Signal(dict)             # Emits only when a true M30 bar closes
+    m30_candle_updated = Signal(dict)            # Emits M30 candle updates (live building)
+    m30_history_loaded = Signal(list)            # Initial M30 history for AI agent
+
     def __init__(self, symbol: str = "XAUUSD", poll_interval_ms: int = 250, parent=None):
         super().__init__(parent)
         self.symbol = symbol
@@ -74,13 +79,18 @@ class LiveMarketFeed(QObject):
         self.current_timeframe = "30M"
         self.bar_duration_sec = 1800
 
-        # Live candle state
+        # Live candle state (for CHART display — follows user-selected timeframe)
         is_btc = "BTC" in symbol.upper()
         self.current_candle: Optional[Dict[str, Any]] = None
         self.last_bid = 84400.0 if is_btc else 4321.20
         self.last_ask = round(self.last_bid + (1.5 if is_btc else 0.35), 2)
         self.last_tick_time = int(time.time())
         self.tick_count = 0
+
+        # ── INDEPENDENT M30 AGGREGATOR STATE (PERMANENTLY LOCKED AT 1800s) ──
+        self._M30_DURATION: int = 1800  # 30 minutes in seconds — NEVER changes
+        self._m30_candle: Optional[Dict[str, Any]] = None
+        self._m30_history: list = []  # Rolling buffer of closed M30 bars for agent
 
         # Background Yahoo poller
         self._yahoo_lock = threading.Lock()
@@ -107,7 +117,8 @@ class LiveMarketFeed(QObject):
         return "BTC-USD" if "BTC" in self.symbol.upper() else "GC=F"
 
     def set_timeframe(self, tf_label: str):
-        """Switches candle aggregation timeframe (1M, 5M, 15M, 30M, 1H, 4H, 1D)."""
+        """Switches CHART DISPLAY candle timeframe (1M, 5M, 15M, 30M, 1H, 4H, 1D).
+        NOTE: This ONLY affects the chart display. The M30 AI aggregator is independent."""
         if tf_label in TIMEFRAME_MAP:
             self.current_timeframe = tf_label
             self.bar_duration_sec = TIMEFRAME_MAP[tf_label]["seconds"]
@@ -259,6 +270,8 @@ class LiveMarketFeed(QObject):
                         })
                     self.current_candle = dict(candles[-1])
                     self.history_loaded.emit(candles)
+                    # Seed M30 aggregator from MT5 if chart TF is 30M, else fetch separately
+                    self._seed_m30_from_mt5_or_chart(candles)
                     return
             except Exception:
                 pass
@@ -297,6 +310,8 @@ class LiveMarketFeed(QObject):
                 if candles:
                     self.current_candle = dict(candles[-1])
                     self.history_loaded.emit(candles)
+                    # Seed M30 aggregator
+                    self._seed_m30_from_yahoo_or_chart(candles)
                     return
         except Exception:
             pass
@@ -316,6 +331,95 @@ class LiveMarketFeed(QObject):
             p = c
         self.current_candle = dict(candles[-1])
         self.history_loaded.emit(candles)
+        self._seed_m30_from_yahoo_or_chart(candles)
+
+    def _seed_m30_from_mt5_or_chart(self, chart_candles: list):
+        """Seeds M30 history from chart candles (if 30M) or directly queries MT5 TIMEFRAME_M30."""
+        if self.current_timeframe == "30M" and chart_candles:
+            self._seed_m30_history_from_candles(chart_candles)
+            return
+
+        if self.mt5_initialized and HAS_MT5:
+            try:
+                rates = mt5.copy_rates_from_pos(self.symbol, mt5.TIMEFRAME_M30, 0, 100)
+                if rates is not None and len(rates) > 0:
+                    m30_candles = []
+                    for r in rates:
+                        m30_candles.append({
+                            "time": int(r['time']),
+                            "open": float(r['open']),
+                            "high": float(r['high']),
+                            "low": float(r['low']),
+                            "close": float(r['close']),
+                            "volume": float(r['tick_volume'])
+                        })
+                    self._seed_m30_history_from_candles(m30_candles)
+                    return
+            except Exception:
+                pass
+
+        self._fetch_and_seed_m30_from_yahoo_or_synth()
+
+    def _seed_m30_from_yahoo_or_chart(self, chart_candles: list):
+        """Seeds M30 history from chart candles (if 30M) or fetches Yahoo 30m chart."""
+        if self.current_timeframe == "30M" and chart_candles:
+            self._seed_m30_history_from_candles(chart_candles)
+            return
+
+        self._fetch_and_seed_m30_from_yahoo_or_synth()
+
+    def _fetch_and_seed_m30_from_yahoo_or_synth(self):
+        """Fetches 30M bars from Yahoo Finance for AI agent or generates 80 synthetic 30M bars."""
+        try:
+            ticker = self._get_yahoo_ticker()
+            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval=30m&range=5d"
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            ctx = ssl.create_default_context()
+            with urllib.request.urlopen(req, timeout=4.0, context=ctx) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                res = data["chart"]["result"][0]
+                timestamps = res["timestamp"]
+                quotes = res["indicators"]["quote"][0]
+                candles = []
+                for i in range(len(timestamps)):
+                    t = timestamps[i]
+                    o = quotes["open"][i]
+                    h = quotes["high"][i]
+                    l = quotes["low"][i]
+                    c = quotes["close"][i]
+                    v = quotes.get("volume", [1000] * len(timestamps))[i] or 1000
+                    if None not in (t, o, h, l, c):
+                        candles.append({
+                            "time": int(t),
+                            "open": round(float(o), 2),
+                            "high": round(float(h), 2),
+                            "low": round(float(l), 2),
+                            "close": round(float(c), 2),
+                            "volume": float(v)
+                        })
+                if len(candles) >= 20:
+                    if len(candles) > 100:
+                        candles = candles[-100:]
+                    self._seed_m30_history_from_candles(candles)
+                    return
+        except Exception:
+            pass
+
+        # Synthetic M30 fallback (80 bars x 1800s)
+        now_m30 = (int(time.time()) // self._M30_DURATION) * self._M30_DURATION
+        st_time = now_m30 - (80 * self._M30_DURATION)
+        p = self.last_bid
+        synth_m30 = []
+        for i in range(80):
+            t = st_time + (i * self._M30_DURATION)
+            c = round(p + random.uniform(-2.5, 2.5), 2)
+            h = round(max(p, c) + random.uniform(0.2, 1.8), 2)
+            l = round(min(p, c) - random.uniform(0.2, 1.8), 2)
+            synth_m30.append({
+                "time": t, "open": p, "high": h, "low": l, "close": c, "volume": 1500
+            })
+            p = c
+        self._seed_m30_history_from_candles(synth_m30)
 
     def _poll_tick(self):
         t0 = time.perf_counter()
@@ -382,8 +486,11 @@ class LiveMarketFeed(QObject):
         # Emit tick
         self.tick_received.emit(tick_data)
 
-        # Update Candlestick for currently selected timeframe
+        # Update Candlestick for currently selected CHART display timeframe
         self._update_candle(tick_data["bid"], tick_data["time"])
+
+        # Update independent M30 aggregator (ALWAYS runs at 1800s regardless of chart TF)
+        self._update_m30_candle(tick_data["bid"], tick_data["time"])
 
     def _update_candle(self, price: float, ts: int):
         bar_start_ts = (ts // self.bar_duration_sec) * self.bar_duration_sec
@@ -403,10 +510,60 @@ class LiveMarketFeed(QObject):
                 "is_closed": False
             }
         else:
-            self.current_candle["high"] = max(self.current_candle["high"], price)
-            self.current_candle["low"] = min(self.current_candle["low"], price)
+            new_high = max(self.current_candle["high"], price)
+            new_low = min(self.current_candle["low"], price)
+            if (price == self.current_candle["close"] and
+                    new_high == self.current_candle["high"] and
+                    new_low == self.current_candle["low"]):
+                return  # No price change — skip redundant UI update
+            self.current_candle["high"] = new_high
+            self.current_candle["low"] = new_low
             self.current_candle["close"] = price
             self.current_candle["volume"] += 1
             self.current_candle["is_closed"] = False
 
         self.candle_updated.emit(self.current_candle)
+
+    def _update_m30_candle(self, price: float, ts: int):
+        """Independent M30 candle aggregator — PERMANENTLY locked at 1800-second bars.
+        This feeds the AI agent with correct M30 data regardless of chart display timeframe."""
+        bar_start_ts = (ts // self._M30_DURATION) * self._M30_DURATION
+
+        if self._m30_candle is None or self._m30_candle["time"] != bar_start_ts:
+            # Previous M30 candle just closed
+            if self._m30_candle is not None:
+                self._m30_candle["is_closed"] = True
+                self._m30_history.append(dict(self._m30_candle))
+                if len(self._m30_history) > 120:
+                    self._m30_history.pop(0)
+                self.m30_candle_closed.emit(self._m30_candle)
+
+            # Start fresh M30 candle
+            self._m30_candle = {
+                "time": bar_start_ts,
+                "open": price,
+                "high": price,
+                "low": price,
+                "close": price,
+                "volume": 1,
+                "is_closed": False
+            }
+        else:
+            self._m30_candle["high"] = max(self._m30_candle["high"], price)
+            self._m30_candle["low"] = min(self._m30_candle["low"], price)
+            self._m30_candle["close"] = price
+            self._m30_candle["volume"] += 1
+            self._m30_candle["is_closed"] = False
+
+        self.m30_candle_updated.emit(self._m30_candle)
+
+    def get_m30_history(self) -> list:
+        """Returns the current rolling buffer of closed M30 candles for the AI agent."""
+        return list(self._m30_history)
+
+    def _seed_m30_history_from_candles(self, candles: list):
+        """Seeds the M30 history buffer from loaded candles (called once on connect)."""
+        self._m30_history = list(candles)
+        if self._m30_history:
+            self._m30_candle = dict(self._m30_history[-1])
+        self.m30_history_loaded.emit(list(self._m30_history))

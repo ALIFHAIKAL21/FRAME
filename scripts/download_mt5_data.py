@@ -1,22 +1,4 @@
-﻿"""
-XAU_DEEP_SNIPER — MetaTrader5 Historical Data Downloader
-=========================================================
-Script untuk mengunduh data historis XAU/USD M30 dari broker via MT5 API.
-
-PRASYARAT:
-1. Install MetaTrader 5 Terminal (gratis dari https://www.metatrader5.com/en/download)
-2. Buka akun Demo di broker yang menyediakan XAU/USD (contoh: ICMarkets, Exness, Pepperstone)
-3. Login ke MT5 Terminal dan pastikan koneksi aktif
-4. Jalankan script ini dari virtual environment project
-
-PENGGUNAAN:
-    python scripts/download_mt5_data.py --years 5 --symbol XAUUSD
-
-CATATAN:
-- Symbol name bisa berbeda antar broker (XAUUSD, XAUUSDm, GOLD, dll)
-- Script akan menyimpan output ke data/raw/xauusd_m30_raw.csv
-- Data diunduh dalam UTC
-"""
+﻿
 
 import argparse
 import sys

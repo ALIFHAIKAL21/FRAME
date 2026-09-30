@@ -1,5 +1,5 @@
 {
-  "timestamp_generated_utc": "2026-09-23T12:00:10.415794+00:00",
+  "timestamp_generated_utc": "2026-09-29T16:26:08.016862+00:00",
   "input_clean_bars": 58772,
   "warmup_bars_trimmed": 127,
   "valid_feature_bars": 58645,
@@ -15,7 +15,10 @@
     "smi_reversal_zone",
     "order_block_zone",
     "liquidity_sweep",
-    "valuation_regime"
+    "valuation_regime",
+    "h4_macro_trend_velocity",
+    "h4_market_structure",
+    "momentum_expansion_persistence"
   ],
   "train_set": {
     "bars": 46900,
@@ -158,6 +161,36 @@
       "mean": 0.0543,
       "std": 0.7149,
       "min": -1.0,
+      "max": 1.0,
+      "inf_count": 0,
+      "status": "PASS",
+      "issues": []
+    },
+    "h4_macro_trend_velocity": {
+      "count": 58517,
+      "mean": 0.0458,
+      "std": 0.2655,
+      "min": -0.7651,
+      "max": 0.7528,
+      "inf_count": 0,
+      "status": "PASS",
+      "issues": []
+    },
+    "h4_market_structure": {
+      "count": 58517,
+      "mean": 0.2256,
+      "std": 0.7415,
+      "min": -1.0,
+      "max": 1.0,
+      "inf_count": 0,
+      "status": "PASS",
+      "issues": []
+    },
+    "momentum_expansion_persistence": {
+      "count": 58517,
+      "mean": 0.1367,
+      "std": 0.588,
+      "min": -0.9996,
       "max": 1.0,
       "inf_count": 0,
       "status": "PASS",

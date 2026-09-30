@@ -16,15 +16,15 @@ class LiveMetricCard(QFrame):
         self.setObjectName("live_card")
         self.setStyleSheet("""
             #live_card {
-                background-color: #0f1522;
-                border: 1px solid #1a2233;
+                background-color: #080808;
+                border: 1px solid #202020;
                 border-radius: 3px;
                 padding: 4px;
             }
         """)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setContentsMargins(7, 4, 7, 4)
         layout.setSpacing(2)
 
         self.lbl_title = QLabel(title.upper())

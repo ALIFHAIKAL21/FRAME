@@ -1,4 +1,4 @@
-﻿"""
+"""
 XAU_DEEP_SNIPER — Data Cleaning Module
 =======================================
 Implementasi 4 algoritma deteksi anomali:
@@ -21,6 +21,7 @@ from typing import Tuple
 
 from . import config
 from .dst_harmonizer import flag_rollover_quarantine
+from .news_blackout import flag_news_blackout, get_blackout_stats
 
 
 def remove_weekend_bars(df: pd.DataFrame) -> Tuple[pd.DataFrame, int]:
@@ -209,8 +210,15 @@ def run_full_cleaning_pipeline(df: pd.DataFrame) -> pd.DataFrame:
         df = clamp_bad_ticks(df, df["is_bad_tick"])
     print(f"[CLEAN] Bad ticks detected & clamped: {bad_tick_count}")
 
-    # Step 5: News blackout placeholder (akan diisi di TAHAP 2/3)
-    df["is_news_blackout"] = False
+    # Step 5: News blackout — flag ±30 menit sekitar NFP, CPI, FOMC, PPI, GDP
+    try:
+        df["is_news_blackout"] = flag_news_blackout(df)
+        stats = get_blackout_stats(df)
+        print(f"[CLEAN] News blackout bars: {stats['blackout_bars']} ({stats['blackout_pct']}%)")
+    except FileNotFoundError as e:
+        print(f"[CLEAN] WARNING: {e}")
+        print("[CLEAN] News blackout dinonaktifkan — semua bar eligible.")
+        df["is_news_blackout"] = False
 
     # Step 6: Hitung entry_eligible
     # Entry eligible = TIDAK ada flag anomali aktif

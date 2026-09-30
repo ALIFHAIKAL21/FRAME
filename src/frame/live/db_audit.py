@@ -6,7 +6,7 @@ Dual-Driver Database Engine:
 Ensures 100% synchronization between Desktop Workstation and 24/7 Cloud Server.
 """
 
-import os, sqlite3, json, pathlib, time
+import os, sqlite3, json, pathlib, time, threading
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 import pandas as pd
@@ -23,10 +23,11 @@ DEFAULT_SQLITE_PATH = _ROOT_DIR / "data" / "flowdev_trade_audit.db"
 DEFAULT_NEON_URL = "postgresql://neondb_owner:npg_RguYVSxW2El4@ep-morning-bread-b59ipjyn-pooler.c-7.us-east-2.aws.neon.tech/neondb?sslmode=require"
 
 class SafeConnectionWrapper:
-    """Auto-committing and auto-closing connection wrapper for PostgreSQL and SQLite."""
-    def __init__(self, conn, is_postgres=False):
+    """Auto-committing connection wrapper. If keep_alive=True, connection is NOT closed (reuse mode)."""
+    def __init__(self, conn, is_postgres=False, keep_alive=False):
         self._conn = conn
         self.is_postgres = is_postgres
+        self._keep_alive = keep_alive  # [PERF] Do not close reused connections
 
     def __enter__(self):
         return self._conn
@@ -40,10 +41,11 @@ class SafeConnectionWrapper:
         except Exception:
             pass
         finally:
-            try:
-                self._conn.close()
-            except Exception:
-                pass
+            if not self._keep_alive:
+                try:
+                    self._conn.close()
+                except Exception:
+                    pass
 
 class TradeAuditDB:
     def __init__(self, db_path: Optional[pathlib.Path] = None, database_url: Optional[str] = None):
@@ -52,10 +54,15 @@ class TradeAuditDB:
         self.database_url = database_url or os.environ.get("DATABASE_URL") or DEFAULT_NEON_URL
         self.is_postgres = False
 
+        # [PERF] Connection reuse: persistent connections instead of new TCP per call
+        self._pg_conn = None          # Reusable PostgreSQL connection
+        self._pg_lock = threading.Lock()   # Thread-safety for shared PG connection
+        self._sqlite_conn = None      # Reusable SQLite connection
+
         # Attempt PostgreSQL connection
         if HAS_PSYCOPG2 and self.database_url:
             try:
-                conn = psycopg2.connect(self.database_url, connect_timeout=5)
+                conn = psycopg2.connect(self.database_url, connect_timeout=1)
                 conn.close()
                 self.is_postgres = True
             except Exception as e:
@@ -64,14 +71,34 @@ class TradeAuditDB:
 
         self._init_db()
 
+    def _get_pg_conn(self):
+        """[PERF] Return reused PostgreSQL connection; reconnect if closed/broken."""
+        if self._pg_conn is None or self._pg_conn.closed:
+            self._pg_conn = psycopg2.connect(
+                self.database_url,
+                cursor_factory=psycopg2.extras.RealDictCursor,
+                connect_timeout=5
+            )
+            self._pg_conn.autocommit = False
+        return self._pg_conn
+
     def _get_connection(self):
         if self.is_postgres:
-            conn = psycopg2.connect(self.database_url, cursor_factory=psycopg2.extras.RealDictCursor)
-            return SafeConnectionWrapper(conn, is_postgres=True)
+            with self._pg_lock:
+                try:
+                    conn = self._get_pg_conn()
+                    return SafeConnectionWrapper(conn, is_postgres=True, keep_alive=True)
+                except Exception:
+                    # Retry with fresh connection on broken pipe
+                    self._pg_conn = None
+                    conn = self._get_pg_conn()
+                    return SafeConnectionWrapper(conn, is_postgres=True, keep_alive=True)
         else:
-            conn = sqlite3.connect(str(self.db_path), timeout=15.0)
-            conn.row_factory = sqlite3.Row
-            return SafeConnectionWrapper(conn, is_postgres=False)
+            # [PERF] Reuse SQLite connection (check_same_thread=False is safe; we call only from one thread at a time)
+            if self._sqlite_conn is None:
+                self._sqlite_conn = sqlite3.connect(str(self.db_path), timeout=15.0, check_same_thread=False)
+                self._sqlite_conn.row_factory = sqlite3.Row
+            return SafeConnectionWrapper(self._sqlite_conn, is_postgres=False, keep_alive=True)
 
     def _init_db(self):
         with self._get_connection() as conn:
@@ -339,6 +366,7 @@ class TradeAuditDB:
                 tp = float(pos.get("current_tp", 0.0)) if pos.get("current_tp") else None
                 fric = float(pos.get("friction", 0.0))
                 op_t = str(pos.get("open_time") or datetime.now(timezone.utc).isoformat())
+                source = pos.get("session_id") or pos.get("source") or source
 
                 if self.is_postgres:
                     cur.execute("""
@@ -531,24 +559,44 @@ class TradeAuditDB:
     # -------------------------------------------------------------
     # Query & Analytics Operations
     # -------------------------------------------------------------
-    def get_closed_trades_df(self, limit: int = 100) -> pd.DataFrame:
+    def get_closed_trades_df(self, limit: int = 100, session_id: Optional[str] = None) -> pd.DataFrame:
         """Retrieves closed trades as a pandas DataFrame for reporting."""
         with self._get_connection() as conn:
+            if session_id:
+                if self.is_postgres:
+                    query = "SELECT * FROM live_trades WHERE status = 'CLOSED' AND source = %s ORDER BY id DESC LIMIT %s"
+                    return pd.read_sql_query(query, conn, params=(session_id, int(limit)))
+                else:
+                    query = "SELECT * FROM live_trades WHERE status = 'CLOSED' AND source = ? ORDER BY id DESC LIMIT ?"
+                    return pd.read_sql_query(query, conn, params=(session_id, int(limit)))
             query = f"SELECT * FROM live_trades WHERE status = 'CLOSED' ORDER BY id DESC LIMIT {int(limit)}"
             return pd.read_sql_query(query, conn)
 
-    def get_all_trades_df(self, limit: int = 200) -> pd.DataFrame:
+    def get_all_trades_df(self, limit: int = 200, session_id: Optional[str] = None) -> pd.DataFrame:
         """Retrieves both open and closed trades."""
         with self._get_connection() as conn:
+            if session_id:
+                if self.is_postgres:
+                    query = "SELECT * FROM live_trades WHERE source = %s ORDER BY id DESC LIMIT %s"
+                    return pd.read_sql_query(query, conn, params=(session_id, int(limit)))
+                else:
+                    query = "SELECT * FROM live_trades WHERE source = ? ORDER BY id DESC LIMIT ?"
+                    return pd.read_sql_query(query, conn, params=(session_id, int(limit)))
             query = f"SELECT * FROM live_trades ORDER BY id DESC LIMIT {int(limit)}"
             return pd.read_sql_query(query, conn)
 
-    def get_active_order(self) -> Optional[Dict[str, Any]]:
+    def get_active_order(self, session_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Retrieves the single active trade currently open, if any."""
         try:
             with self._get_connection() as conn:
                 cur = conn.cursor()
-                cur.execute("SELECT * FROM live_trades WHERE status = 'OPEN' ORDER BY id DESC LIMIT 1")
+                if session_id:
+                    if self.is_postgres:
+                        cur.execute("SELECT * FROM live_trades WHERE status = 'OPEN' AND source = %s ORDER BY id DESC LIMIT 1", (session_id,))
+                    else:
+                        cur.execute("SELECT * FROM live_trades WHERE status = 'OPEN' AND source = ? ORDER BY id DESC LIMIT 1", (session_id,))
+                else:
+                    cur.execute("SELECT * FROM live_trades WHERE status = 'OPEN' ORDER BY id DESC LIMIT 1")
                 row = cur.fetchone()
                 return dict(row) if row else None
         except Exception as e:
@@ -616,11 +664,11 @@ class TradeAuditDB:
                 f"SELECT * FROM auth_audit_log ORDER BY id DESC LIMIT {int(limit)}", conn
             )
 
-    def get_overall_stats(self) -> Dict[str, Any]:
+    def get_overall_stats(self, session_id: Optional[str] = None) -> Dict[str, Any]:
         """Calculates live trading performance metrics from database."""
         with self._get_connection() as conn:
             cur = conn.cursor()
-            cur.execute("""
+            query = """
                 SELECT 
                     COUNT(*) as total_trades,
                     SUM(CASE WHEN win_flag = 1 THEN 1 ELSE 0 END) as wins,
@@ -629,7 +677,13 @@ class TradeAuditDB:
                     COALESCE(SUM(CASE WHEN net_pnl > 0 THEN net_pnl ELSE 0 END), 0.0) as gross_profit,
                     COALESCE(SUM(CASE WHEN net_pnl < 0 THEN ABS(net_pnl) ELSE 0 END), 0.0) as gross_loss
                 FROM live_trades WHERE status = 'CLOSED'
-            """)
+            """
+            params = []
+            if session_id:
+                placeholder = "%s" if self.is_postgres else "?"
+                query += f" AND source = {placeholder}"
+                params.append(session_id)
+            cur.execute(query, tuple(params) if params else ())
             r = cur.fetchone()
             tot = (r["total_trades"] if isinstance(r, dict) or hasattr(r, "__getitem__") else r[0]) or 0
             wins = (r["wins"] if isinstance(r, dict) or hasattr(r, "__getitem__") else r[1]) or 0
@@ -652,13 +706,17 @@ class TradeAuditDB:
         self,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        initial_capital: float = 500.0
+        initial_capital: float = 500.0,
+        session_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """Builds a comprehensive audit evaluation package from closed live trades."""
         with self._get_connection() as conn:
             query = "SELECT * FROM live_trades WHERE status = 'CLOSED'"
             params = []
             param_placeholder = "%s" if self.is_postgres else "?"
+            if session_id:
+                query += f" AND source = {param_placeholder}"
+                params.append(session_id)
             if start_date:
                 query += f" AND open_time >= {param_placeholder}"
                 params.append(start_date)

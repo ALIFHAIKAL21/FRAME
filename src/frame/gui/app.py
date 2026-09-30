@@ -6,8 +6,7 @@ Clean, legacy, minimalist aesthetic. No clutter, no unnecessary icons.
 
 import sys, os, pathlib, json
 from typing import Optional, Dict, Any
-import pandas as pd
-import numpy as np
+
 
 try:
     from PySide6.QtWidgets import (
@@ -133,6 +132,16 @@ class MainWindow(QMainWindow):
         lbl_ctrl_title.setStyleSheet("font-size: 10px; font-weight: 700; color: #8b949e; letter-spacing: 1px;")
         left_layout.addWidget(lbl_ctrl_title)
 
+        # 0. Deep Learning Model Selector
+        left_layout.addWidget(QLabel("Deep Learning Model:"))
+        self.combo_model = QComboBox()
+        self.combo_model.setMaxVisibleItems(5)
+        self.combo_model.addItems([
+            "MOMENT-1-large Pretrained [LOCKED PRODUCTION]",
+            "CNN-BiLSTM Baseline [LEGACY BENCHMARK]"
+        ])
+        left_layout.addWidget(self.combo_model)
+
         # 1. Period Scope Selector
         left_layout.addWidget(QLabel("Audit Time Scope:"))
         self.combo_period_mode = QComboBox()
@@ -214,22 +223,22 @@ class MainWindow(QMainWindow):
         left_layout.addWidget(self.frame_period_sub)
         self.combo_period_mode.currentIndexChanged.connect(self._on_period_mode_changed)
 
-        # 2. Flexible Account Capital
-        left_layout.addWidget(QLabel("Account Capital ($ USD):"))
+        # 2. Account Capital (Locked $250 - $500 USD)
+        left_layout.addWidget(QLabel("Account Capital ($250 - $500 USD):"))
         self.spin_capital = QDoubleSpinBox()
         self.spin_capital.setLocale(QLocale(QLocale.Language.English, QLocale.Country.UnitedStates))
-        self.spin_capital.setRange(50.0, 1000000.0)
+        self.spin_capital.setRange(250.0, 500.0)
         self.spin_capital.setSingleStep(50.0)
-        self.spin_capital.setValue(500.0)
+        self.spin_capital.setValue(250.0)
         self.spin_capital.setPrefix("$ ")
         self.spin_capital.setDecimals(2)
         self.spin_capital.setStyleSheet("font-family: 'Consolas', monospace; font-size: 11px; font-weight: 700; color: #00e676;")
         left_layout.addWidget(self.spin_capital)
 
-        # Quick Preset Buttons
+        # Quick Preset Buttons: Strictly $250 (0.02L) and $500 (0.04L)
         preset_row = QHBoxLayout()
-        preset_row.setSpacing(4)
-        for val in [250, 500, 1000, 2500]:
+        preset_row.setSpacing(6)
+        for val, lot in [(250, 0.02), (500, 0.04)]:
             btn = QPushButton(f"${val}")
             btn.setStyleSheet("""
                 QPushButton {
@@ -246,7 +255,7 @@ class MainWindow(QMainWindow):
                     color: #f0f6fc;
                 }
             """)
-            btn.clicked.connect(lambda _, v=val: self.spin_capital.setValue(float(v)))
+            btn.clicked.connect(lambda _, v=val, l=lot: (self.spin_capital.setValue(float(v)), self.spin_max_lot.setValue(l)))
             preset_row.addWidget(btn)
         left_layout.addLayout(preset_row)
 
@@ -273,9 +282,9 @@ class MainWindow(QMainWindow):
         row_cap.addWidget(QLabel("Max Lot Cap:"))
         self.spin_max_lot = QDoubleSpinBox()
         self.spin_max_lot.setLocale(QLocale(QLocale.Language.English, QLocale.Country.UnitedStates))
-        self.spin_max_lot.setRange(0.05, 50.0)
-        self.spin_max_lot.setSingleStep(0.10)
-        self.spin_max_lot.setValue(2.00)
+        self.spin_max_lot.setRange(0.01, 0.05)
+        self.spin_max_lot.setSingleStep(0.01)
+        self.spin_max_lot.setValue(0.02)
         self.spin_max_lot.setSuffix(" L")
         self.spin_max_lot.setDecimals(2)
         self.spin_max_lot.setStyleSheet("font-family: monospace; font-size: 11px; font-weight: 700; color: #ffd700;")
@@ -283,9 +292,11 @@ class MainWindow(QMainWindow):
 
         max_lot_layout.addLayout(row_cap)
 
-        lbl_formula = QLabel("Rule: Lot = (Equity/Cap) × 0.01")
-        lbl_formula.setStyleSheet("color: #78909c; font-size: 9.5px; font-family: monospace;")
+        lbl_formula = QLabel("Rule: Trend Gate (EMA200) + Daily Breaker + Auto Cap Locked")
+        lbl_formula.setStyleSheet("color: #78909c; font-size: 9.0px; font-family: monospace;")
         max_lot_layout.addWidget(lbl_formula)
+
+        self.spin_capital.valueChanged.connect(lambda v: self.spin_max_lot.setValue(0.02 if v <= 300.0 else 0.04))
 
         left_layout.addWidget(self.frame_max_lot)
         self.combo_sizing.currentIndexChanged.connect(self._on_sizing_mode_changed)
@@ -301,13 +312,15 @@ class MainWindow(QMainWindow):
         left_layout.addWidget(lbl_oms_spec)
 
         oms_box = QLabel(
-            "• Micro-BE : +0.75R\n"
-            "• Ratchet  : +1.2R (0.5R)\n"
-            "• Trail    : +1.5R (0.6R)\n"
-            "• Decay    : Bar 6 (-0.45R)\n"
-            "• Max TP   : +2.7R\n"
-            "• Barrier  : 12 Bars (6h)\n"
-            "• Dynamic Friction Scaled"
+            "• Model   : MOMENT-1-large (15-Ch)\n"
+            "• Sizing  : Dual-Mode (Cap 0.02L)\n"
+            "• Micro-BE: +0.75R (Off if ATR<10p)\n"
+            "• Ratchet : +1.2R (0.5R)\n"
+            "• Trail   : +1.5R (0.6R)\n"
+            "• Decay   : Adapt (9b <14p / 6b >=14p)\n"
+            "• Dyn TP  : 1.0R (<18p) / 2.7R (>=18p)\n"
+            "• Vol Gate: F3(13p) + F6(20p) + F7(65p)\n"
+            "• Barrier : 12 Bars (6h) / Macro EMA200"
         )
         oms_box.setObjectName("oms_box")
         oms_box.setStyleSheet("#oms_box { background-color: #080a10; border: 1px solid #181f2b; padding: 6px; color: #78909c; font-family: monospace; font-size: 10px; line-height: 1.3; }")
@@ -483,13 +496,15 @@ class MainWindow(QMainWindow):
             "                   FLOWDEV FRAME SYSTEM DIAGNOSTIC REPORT                 ",
             "==========================================================================",
             f"Python Runtime     : {sys.version.split()[0]} ({sys.executable})",
-            f"PyTorch Checkpoint : c:\\Ngoding\\xau_deep_sniper\\checkpoints\\predictions_15ch.npy",
+            f"New Pretrained Model: c:\\Ngoding\\xau_deep_sniper\\checkpoints\\best_moment_15ch_pretrained_lora.pt",
+            f"Legacy Model Checkpt: c:\\Ngoding\\xau_deep_sniper\\checkpoints\\best_moment_15ch_lora.pt",
             f"15-Channel Parquet : c:\\Ngoding\\xau_deep_sniper\\data\\processed\\xauusd_m30_labeled_15ch.parquet",
-            f"Active Architecture: 15-Channel 1D-CNN + BiLSTM (Recurrent Neural Network)",
+            f"Causal Execution   : Zero-Lookahead Next-Open Fill (t+1) + Pessimistic SL/TP",
+            f"Locked Capital Scope: $250.00 - $500.00 USD (Realistic Broker 1:100 Leverage)",
+            f"Broker Protections : Stop Out at 50% Margin Level | Dynamic Lot Compounding",
             f"Locked Target Asset: XAU/USD (Gold Spot) on M30 Timeframe",
-            "Hardware Target    : NVIDIA GeForce RTX 4050 Laptop GPU (CUDA 12.6)",
-            "Kinetic Protections: Micro-BE (+0.75R) | Stale Decay (Bar 6 / -0.45R) | TP (+2.7R)",
-            "Multi-Year History : 59 Months (Oct 2021 - Aug 2026) Verified 100% Green",
+            f"Hardware Target    : NVIDIA GeForce RTX 4050 Laptop GPU (CUDA 12.6/13.4)",
+            f"Kinetic Protections: Micro-BE (+0.75R) | Ratchet (+1.2R) | Trail (+1.5R) | Decay (Bar 6)",
             "=========================================================================="
         ]
         self.txt_diag.setPlainText("\n".join(diag_lines))
@@ -539,10 +554,13 @@ class MainWindow(QMainWindow):
 
         max_lot = float(self.spin_max_lot.value())
 
+        model_choice = "pretrained" if self.combo_model.currentIndex() == 0 else "legacy"
+        model_tag = "MOMENT Pretrained" if model_choice == "pretrained" else "CNN-BiLSTM"
+
         self.btn_run.setEnabled(False)
         self.btn_export.setEnabled(False)
         self.progress_bar.setValue(5)
-        self.lbl_status.setText(f"Running simulation: {mode} (${capital:,.0f} | {sizing_mode.upper()})...")
+        self.lbl_status.setText(f"Running simulation: {mode} (${capital:,.0f} | {sizing_mode.upper()} | {model_tag})...")
 
         self.worker = BacktestWorker(
             mode=mode,
@@ -551,7 +569,8 @@ class MainWindow(QMainWindow):
             capital=capital,
             lot=0.01,
             sizing_mode=sizing_mode,
-            max_lot=max_lot
+            max_lot=max_lot,
+            model_choice=model_choice
         )
         self.worker.progress.connect(self._on_worker_progress)
         self.worker.log_message.connect(self._log)
@@ -679,6 +698,7 @@ class MainWindow(QMainWindow):
                 self.tbl_trades.setItem(row, c, itm)
 
     def _export_reports(self):
+        import numpy as np
         if not self.last_results:
             return
         out_dir = pathlib.Path(r"c:\Ngoding\xau_deep_sniper\reports")
