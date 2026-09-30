@@ -26,48 +26,50 @@ class LivePositionHUD(QFrame):
         self.setObjectName("pos_hud")
         self.setStyleSheet("""
             #pos_hud {
-                background-color: #070707;
-                border: 1px solid #202020;
-                border-radius: 4px;
-                padding: 6px;
+                background-color: #0d111a;
+                border: 1px solid #1c2333;
+                border-radius: 3px;
+                padding: 4px;
             }
         """)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 4, 8, 4)
-        layout.setSpacing(3)
-        self.setMaximumHeight(58)
+        layout.setSpacing(2)
+        self.setMaximumHeight(46)
 
         # 1. Standby / Empty Bar
         self.frame_standby = QFrame()
         st_layout = QHBoxLayout(self.frame_standby)
-        st_layout.setContentsMargins(0, 0, 0, 0)
-        self.lbl_standby = QLabel("STANDBY // AGENT ACTIVELY SCANNING XAU/USD FOR INSTITUTIONAL SETUP...")
-        self.lbl_standby.setStyleSheet("color: #78909c; font-size: 11px; font-family: monospace; font-weight: 600;")
+        st_layout.setContentsMargins(4, 2, 4, 2)
+        self.lbl_standby = QLabel("● STANDBY // AGENT ACTIVELY SCANNING XAU/USD (M30) FOR INSTITUTIONAL SETUP...")
+        self.lbl_standby.setStyleSheet("color: #64748b; font-size: 11px; font-family: monospace; font-weight: 600;")
         st_layout.addWidget(self.lbl_standby)
+        st_layout.addStretch()
         layout.addWidget(self.frame_standby)
 
         # 2. Active Position Bar
         self.frame_active = QFrame()
         act_layout = QHBoxLayout(self.frame_active)
-        act_layout.setContentsMargins(0, 0, 0, 0)
-        act_layout.setSpacing(12)
+        act_layout.setContentsMargins(2, 0, 2, 0)
+        act_layout.setSpacing(10)
 
         # Col A: Direction & Lot
         self.lbl_dir = QLabel("BUY 0.01L")
         self.lbl_dir.setStyleSheet("""
-            background-color: #1e3a8a; color: #93c5fd; font-weight: 800;
-            padding: 4px 10px; border-radius: 3px; font-size: 13px; font-family: monospace;
+            background-color: #064e3b; color: #a7f3d0; font-weight: 800;
+            padding: 3px 8px; border-radius: 3px; font-size: 11px; font-family: monospace;
+            border: 1px solid #059669;
         """)
         act_layout.addWidget(self.lbl_dir)
 
         # Col B: Entry & Live Price
-        col_b = QVBoxLayout()
-        col_b.setSpacing(1)
-        self.lbl_prices = QLabel("ENTRY: $4,310.50  |  MARKET: $4,312.10")
-        self.lbl_prices.setStyleSheet("color: #c9d1d9; font-size: 11px; font-family: monospace;")
-        self.lbl_targets = QLabel("SL: $4,305.20  |  TP (+2.7R): $4,324.80")
-        self.lbl_targets.setStyleSheet("color: #8b949e; font-size: 10px; font-family: monospace;")
+        col_b = QHBoxLayout()
+        col_b.setSpacing(8)
+        self.lbl_prices = QLabel("ENTRY: $4,310.50 | MKT: $4,312.10")
+        self.lbl_prices.setStyleSheet("color: #f1f5f9; font-size: 11px; font-family: monospace; font-weight: 700;")
+        self.lbl_targets = QLabel("SL: $4,305.20 | TP: $4,324.80")
+        self.lbl_targets.setStyleSheet("color: #94a3b8; font-size: 11px; font-family: monospace;")
         col_b.addWidget(self.lbl_prices)
         col_b.addWidget(self.lbl_targets)
         act_layout.addLayout(col_b)
@@ -77,38 +79,40 @@ class LivePositionHUD(QFrame):
         # Col C: Kinetic OMS Stage Badge
         self.lbl_oms_stage = QLabel("STAGE 0: INITIAL SL")
         self.lbl_oms_stage.setStyleSheet("""
-            background-color: #182234; color: #38bdf8; font-size: 10px;
-            font-weight: 700; padding: 4px 8px; border: 1px solid #233876; border-radius: 3px;
+            background-color: #0f172a; color: #38bdf8; font-size: 10px;
+            font-weight: 700; padding: 3px 6px; border: 1px solid #1e293b; border-radius: 3px;
+            font-family: monospace;
         """)
         act_layout.addWidget(self.lbl_oms_stage)
 
         # Col D: Floating PnL ($ and R)
         self.lbl_pnl = QLabel("+$0.00 (+0.00R)")
         self.lbl_pnl.setStyleSheet("""
-            font-size: 18px; font-weight: 800; font-family: 'Consolas', monospace; color: #00e676;
+            font-size: 15px; font-weight: 800; font-family: 'Consolas', monospace; color: #00e676;
         """)
         act_layout.addWidget(self.lbl_pnl)
 
         # Col E: Time held / Bars
-        self.lbl_bars = QLabel("Bar 1/12 (00:02)")
-        self.lbl_bars.setStyleSheet("color: #8b949e; font-size: 10px; font-family: monospace;")
+        self.lbl_bars = QLabel("Bar 1/12")
+        self.lbl_bars.setStyleSheet("color: #64748b; font-size: 10px; font-family: monospace;")
         act_layout.addWidget(self.lbl_bars)
 
         # Col F: Panic Close Button
         self.btn_close = QPushButton("CLOSE POSITION")
         self.btn_close.setStyleSheet("""
             QPushButton {
-                background-color: #7f1d1d;
+                background-color: #450a0a;
                 border: 1px solid #dc2626;
-                color: #ffffff;
+                color: #fca5a5;
                 font-weight: 700;
-                font-size: 11px;
-                padding: 6px 12px;
+                font-size: 10px;
+                padding: 4px 10px;
                 border-radius: 3px;
+                font-family: monospace;
             }
             QPushButton:hover {
-                background-color: #991b1b;
-                border-color: #ef4444;
+                background-color: #7f1d1d;
+                color: #ffffff;
             }
         """)
         self.btn_close.clicked.connect(self.close_requested.emit)

@@ -32,47 +32,14 @@ class LiveTradeJournalWidget(QTabWidget):
         l_layout.setContentsMargins(5, 4, 5, 4)
         l_layout.setSpacing(4)
 
-        # ── 1. ACTIVE / FLOATING POSITION BANNER ──
+        # ── 1. ACTIVE / FLOATING POSITION BANNER (Detached / Handled by Position HUD) ──
         self.active_card = QFrame()
-        self.active_card.setStyleSheet("""
-            QFrame {
-                background-color: #070707;
-                border: 1px solid #202020;
-                border-radius: 4px;
-                padding: 6px 10px;
-            }
-        """)
-        ac_layout = QHBoxLayout(self.active_card)
-        ac_layout.setContentsMargins(4, 4, 4, 4)
-        ac_layout.setSpacing(10)
-
         self.lbl_active_badge = QLabel("⚡ STANDBY")
-        self.lbl_active_badge.setStyleSheet("""
-            background-color: #1e293b; color: #94a3b8; font-weight: 800;
-            padding: 3px 8px; border-radius: 3px; font-size: 11px; font-family: monospace;
-        """)
-        ac_layout.addWidget(self.lbl_active_badge)
-
-        self.lbl_active_info = QLabel("No active order. Agent scanning M30 market setups...")
-        self.lbl_active_info.setStyleSheet("color: #64748b; font-size: 11px; font-family: monospace;")
-        ac_layout.addWidget(self.lbl_active_info, stretch=1)
-
+        self.lbl_active_info = QLabel("")
         self.lbl_active_pnl = QLabel("")
-        self.lbl_active_pnl.setStyleSheet("font-size: 14px; font-weight: 800; font-family: monospace;")
-        ac_layout.addWidget(self.lbl_active_pnl)
-
         self.lbl_active_stage = QLabel("")
-        self.lbl_active_stage.setStyleSheet("color: #38bdf8; font-size: 10px; font-family: monospace; font-weight: 700;")
-        ac_layout.addWidget(self.lbl_active_stage)
 
-        l_layout.addWidget(self.active_card)
-
-        # ── 2. SECTION HEADER: CLOSED TRADES LEDGER ──
-        self.lbl_ledger_header = QLabel("📜 HISTORICAL CLOSED TRADES LEDGER (SETTLED)")
-        self.lbl_ledger_header.setStyleSheet("color: #8b949e; font-size: 10px; font-weight: 800; font-family: monospace;")
-        l_layout.addWidget(self.lbl_ledger_header)
-
-        # ── 3. CLOSED TRADES TABLE ──
+        # ── 2. CLOSED TRADES TABLE ──
         self.tbl_trades = QTableWidget()
         self.tbl_trades.setColumnCount(10)
         self.tbl_trades.setHorizontalHeaderLabels([
@@ -80,9 +47,27 @@ class LiveTradeJournalWidget(QTabWidget):
             "SL Dist ($)", "Net PnL ($)", "Balance ($)", "Bars Held", "Exit Reason"
         ])
         self.tbl_trades.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.tbl_trades.horizontalHeader().setFixedHeight(24)
+        self.tbl_trades.horizontalHeader().setFixedHeight(25)
         self.tbl_trades.verticalHeader().setVisible(False)
         self.tbl_trades.verticalHeader().setDefaultSectionSize(22)
+        self.tbl_trades.setStyleSheet("""
+            QTableWidget {
+                background-color: #0b0f17;
+                border: 1px solid #161e2e;
+                gridline-color: #1a2333;
+                font-family: 'Consolas', monospace;
+                font-size: 11px;
+                color: #cbd5e1;
+            }
+            QHeaderView::section {
+                background-color: #0f172a;
+                color: #8b949e;
+                font-weight: 700;
+                font-size: 10px;
+                border: 1px solid #1e293b;
+                padding: 3px;
+            }
+        """)
         l_layout.addWidget(self.tbl_trades, stretch=1)
         self.addTab(self.tab_ledger, "LIVE TRADE JOURNAL")
 

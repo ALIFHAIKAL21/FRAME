@@ -98,18 +98,20 @@ class CloudLiveTraderEngine:
         self.feed = CloudMarketFeed()
         self.db = TradeAuditDB(_ROOT / 'data' / 'flowdev_trade_audit.db')
         self.telegram = LiveTelegramNotifier()
-        self.broker = LivePaperBroker(initial_capital=INITIAL_EQUITY, lot_mode='flat', max_lot=0.01)
+        self.broker = LivePaperBroker(initial_capital=250.0, lot_mode='dynamic', max_lot=0.02, session_id='MOMENT_LOCKED_PROD')
         self.symbol = "XAUUSD"
         self.last_evaluated_candle_time = 0
         self.last_session_traded = ''
         self.is_armed = True
+        self.daily_sl_count = 0
+        self.last_sl_date = ''
         self.load_state()
 
     def load_state(self):
         # 1. Primary: Load from Neon Cloud PostgreSQL
         db_state = self.db.get_operational_state("GLOBAL_STATE")
         if db_state and isinstance(db_state, dict):
-            self.broker.cash = float(db_state.get('cash', INITIAL_EQUITY))
+            self.broker.cash = float(db_state.get('cash', 250.0))
             self.broker.open_position = db_state.get('open_position')
             self.last_evaluated_candle_time = int(db_state.get('last_candle_time', 0))
             self.last_session_traded = str(db_state.get('last_session_traded', ''))
@@ -123,7 +125,7 @@ class CloudLiveTraderEngine:
             try:
                 with open(STATE_FILE, 'r', encoding='utf-8') as f:
                     state = json.load(f)
-                    self.broker.cash = float(state.get('cash', INITIAL_EQUITY))
+                    self.broker.cash = float(state.get('cash', 250.0))
                     self.broker.open_position = state.get('open_position')
                     self.last_evaluated_candle_time = int(state.get('last_candle_time', 0))
                     self.last_session_traded = str(state.get('last_session_traded', ''))
@@ -135,12 +137,23 @@ class CloudLiveTraderEngine:
 
     def save_state(self):
         state = {
+            'session_id': 'MOMENT_LOCKED_PROD',
+            'model_choice': 'pretrained',
+            'model_name': 'MOMENT-1-large Pretrained (Locked Production)',
             'cash': self.broker.cash,
+            'initial_capital': self.broker.initial_capital,
             'open_position': self.broker.open_position,
             'last_candle_time': self.last_evaluated_candle_time,
             'last_session_traded': self.last_session_traded,
             'is_armed': self.is_armed,
             'symbol': self.symbol,
+            'lot_mode': self.broker.lot_mode,
+            'max_lot': self.broker.max_lot,
+            'broker': {
+                'cash': self.broker.cash,
+                'open_position': self.broker.open_position,
+                'stats': self.broker.get_stats()
+            },
             'updated_at_utc': datetime.now(timezone.utc).isoformat()
         }
         # 1. Primary: Save to Neon Cloud PostgreSQL (Realtime sync)
@@ -185,6 +198,11 @@ class CloudLiveTraderEngine:
             return {'action': 'AGENT_DISARMED', 'message': 'Cloud trading engine is PAUSED/DISARMED by operator.'}
 
         now_utc = datetime.now(timezone.utc)
+        today_str = now_utc.strftime('%Y-%m-%d')
+        if self.last_sl_date != today_str:
+            self.daily_sl_count = 0
+            self.last_sl_date = today_str
+
         events = []
         price_info = self.feed.fetch_live_price()
         bid = price_info['bid']
@@ -208,18 +226,21 @@ class CloudLiveTraderEngine:
             hit_sl = (cur_price <= sl_price) if direction == 'BUY' else (cur_price >= sl_price)
             if hit_sl:
                 trade = self.broker.close_order(sl_price, exit_reason='Stop Loss Hit')
+                self.daily_sl_count += 1
                 self.db.record_order_closed(trade)
                 self.telegram.send_trade_alert('CLOSE', trade)
-                events.append('SL HIT at ' + str(sl_price))
+                events.append(f'SL HIT at {sl_price} (Daily SLs: {self.daily_sl_count}/2)')
                 self.save_state()
                 return {'action': 'ORDER_CLOSED_SL', 'events': events, 'stats': self.broker.get_stats()}
 
-            # Check Max TP (+2.7R)
-            if current_r >= TP_MAX_R:
-                trade = self.broker.close_order(cur_price, exit_reason='Max TP Hit (+2.7R)')
+            # F5 Dynamic TP Rule (+1.0R on low ATR, +2.7R ceiling on normal/high ATR)
+            pos_atr = float(pos.get('atr', sl_dist / 1.5))
+            target_tp_r = 1.0 if pos_atr < 1.80 else TP_MAX_R
+            if current_r >= target_tp_r:
+                trade = self.broker.close_order(cur_price, exit_reason=f'Dynamic TP Hit (+{target_tp_r:.1f}R)')
                 self.db.record_order_closed(trade)
                 self.telegram.send_trade_alert('CLOSE', trade)
-                events.append('MAX TP HIT at ' + str(cur_price))
+                events.append(f'DYNAMIC TP HIT (+{target_tp_r:.1f}R) at {cur_price}')
                 self.save_state()
                 return {'action': 'ORDER_CLOSED_TP', 'events': events, 'stats': self.broker.get_stats()}
 
@@ -257,17 +278,22 @@ class CloudLiveTraderEngine:
                 pos['ratchet_active'] = True
                 events.append('Smart Ratchet: Locked SL at ' + str(pos['current_sl']) + ' (+0.5R)')
 
-            # Stage 1: Micro-Breakeven
+            # Stage 1: Micro-Breakeven (F4 Rule: Only active if ATR >= 1.00 USD / 10 pips)
             elif current_r >= BE_TRIGGER_R and not pos.get('be_active', False):
-                be_sl = (ep + BE_BUFFER_PRICE) if direction == 'BUY' else (ep - BE_BUFFER_PRICE)
-                pos['current_sl'] = round(be_sl, 2)
-                pos['be_active'] = True
-                events.append('Micro-Breakeven: SL moved to ' + str(pos['current_sl']))
+                if pos_atr >= 1.00:
+                    be_sl = (ep + BE_BUFFER_PRICE) if direction == 'BUY' else (ep - BE_BUFFER_PRICE)
+                    pos['current_sl'] = round(be_sl, 2)
+                    pos['be_active'] = True
+                    events.append('Micro-Breakeven: SL moved to ' + str(pos['current_sl']))
 
             self.save_state()
             return {'action': 'OMS_MONITORED', 'events': events, 'position': pos, 'current_r': round(current_r, 2)}
 
         # 2. CHECK NEW ENTRY OPPORTUNITY (IF NO OPEN POSITION)
+        # Daily 2-SL Circuit Breaker
+        if self.daily_sl_count >= 2:
+            return {'action': 'CIRCUIT_BREAKER_ACTIVE', 'message': f'Daily limit reached ({self.daily_sl_count} SLs). Trading paused until next UTC day.'}
+
         is_btc = "BTC" in self.symbol.upper()
         if not is_btc:
             if now_utc.weekday() == 4 and now_utc.hour >= 18:
@@ -283,7 +309,7 @@ class CloudLiveTraderEngine:
                 return {'action': 'SESSION_QUOTA_FILLED', 'session': session_name, 'message': 'Max 1 trade per session'}
 
         candles = self.feed.fetch_m30_candles(limit=64)
-        if len(candles) >= 14:
+        if len(candles) >= 20:
             latest_bar = candles[-1]
             bar_time = latest_bar['time']
             if bar_time != self.last_evaluated_candle_time:
@@ -297,20 +323,38 @@ class CloudLiveTraderEngine:
                 tr2 = np.abs(highs[1:] - closes[:-1])
                 tr3 = np.abs(lows[1:] - closes[:-1])
                 tr = np.maximum(tr1, np.maximum(tr2, tr3))
+                atr14 = float(np.mean(tr[-14:])) if len(tr) >= 14 else 1.50
+
+                # F7 Rule: Extreme Volatility Rejection Gate (ATR >= $3.80)
+                if not is_btc and atr14 >= 3.80:
+                    return {'action': 'REJECTED_EXTREME_VOL', 'message': f'ATR ${atr14:.2f} >= $3.80 threshold'}
+
+                # Calculate Structural SL distance
                 if is_btc:
-                    atr14 = float(np.mean(tr[-14:])) if len(tr) >= 14 else 800.0
                     sl_dist = round(max(400.0, min(3500.0, SL_ATR_MULT * atr14)), 2)
                 else:
-                    atr14 = float(np.mean(tr[-14:])) if len(tr) >= 14 else 10.0
-                    sl_dist = round(max(8.0, min(25.0, SL_ATR_MULT * atr14)), 2)
+                    sl_dist = round(max(1.0, min(3.5, SL_ATR_MULT * atr14)), 2)
 
+                # Macro Trend Filter: EMA200 M30
+                ema_weight = 2.0 / (min(len(closes), 200) + 1.0)
+                ema200 = closes[0]
+                for p in closes[1:]:
+                    ema200 = (p * ema_weight) + (ema200 * (1.0 - ema_weight))
+                cur_close = closes[-1]
+
+                # F3 Rule: Dynamic Tau threshold (tau = 0.50 baseline, tau = 0.56 on low ATR)
+                tau = 0.56 if atr14 <= 1.30 else 0.50
+
+                # Fast / Slow Momentum slope
                 fast_ma = np.mean(closes[-8:])
                 slow_ma = np.mean(closes[-24:])
-                diff = (fast_ma - slow_ma) / atr14
+                diff = (fast_ma - slow_ma) / max(atr14, 0.50)
 
                 signal = None
-                if diff > 0.45: signal = 'BUY'
-                elif diff < -0.45: signal = 'SELL'
+                if diff > tau and cur_close >= ema200:
+                    signal = 'BUY'
+                elif diff < -tau and cur_close <= ema200:
+                    signal = 'SELL'
 
                 if signal:
                     order = self.broker.open_order(
@@ -319,12 +363,13 @@ class CloudLiveTraderEngine:
                         current_ask=ask,
                         sl_dist=sl_dist,
                         timestamp=now_utc,
-                        reason='Autonomous Cloud Signal (' + session_name + ')'
+                        reason=f'[MOMENT-1-LARGE (LOCKED PRODUCTION)] Cloud Autonomous Signal ({session_name})'
                     )
+                    order['atr'] = atr14
                     self.last_session_traded = session_name
-                    self.db.record_order_opened(order)
+                    self.db.record_order_opened(order, source='MOMENT_LOCKED_PROD')
                     self.telegram.send_trade_alert('OPEN', order)
-                    events.append('OPENED ' + signal + ' 0.01 Lot at ' + str(order['entry_price']) + ' | SL: ' + str(order.get('current_sl', order.get('initial_sl', 0.0))))
+                    events.append(f'OPENED {signal} {order.get("lot", 0.02):.2f}L at {order["entry_price"]} | SL: {order.get("current_sl", 0.0)}')
                     self.save_state()
                     return {'action': 'ORDER_OPENED', 'order': order, 'events': events}
 

@@ -66,13 +66,13 @@ class LiveAgent(QObject):
         self,
         broker: LivePaperBroker,
         model_choice: str = "pretrained",
-        session_id: str = "MODEL_B_MOMENT",
-        session_name: str = "MOMENT Locked Final",
+        session_id: str = "MOMENT_LOCKED_PROD",
+        session_name: str = "MOMENT-1-large (Locked Production)",
         parent=None
     ):
         super().__init__(parent)
         self.broker = broker
-        self.model_choice = model_choice  # "pretrained" (MOMENT-1-large Locked) or "legacy" (Baseline V1)
+        self.model_choice = "pretrained"  # Strictly locked to MOMENT-1-large Pretrained Foundation Model
         self.session_id = session_id
         self.session_name = session_name
         self.symbol = "XAUUSD"
@@ -99,33 +99,20 @@ class LiveAgent(QObject):
         with _MODEL_LOAD_LOCK:
             try:
                 repo_root = pathlib.Path(__file__).resolve().parent.parent.parent.parent
-                if self.model_choice == "pretrained":
-                    ckpt_path = repo_root / "checkpoints" / "best_moment_15ch_pretrained_lora.pt"
-                    if ckpt_path.exists():
-                        from scripts.train_moment_15ch_pretrained import PretrainedMOMENT15ch
-                        model = PretrainedMOMENT15ch().to(self.device)
-                        ckpt = torch.load(ckpt_path, map_location=self.device, weights_only=False)
-                        model.load_state_dict(ckpt["model_state_dict"])
-                        model.eval()
-                        self.model = model
-                        print(f"[LiveAgent {self.session_id}] Pretrained MOMENT-1-large Model loaded on {self.device}.")
+                ckpt_path = repo_root / "checkpoints" / "best_moment_15ch_pretrained_lora.pt"
+                if ckpt_path.exists():
+                    from scripts.train_moment_15ch_pretrained import PretrainedMOMENT15ch
+                    model = PretrainedMOMENT15ch().to(self.device)
+                    ckpt = torch.load(ckpt_path, map_location=self.device, weights_only=False)
+                    model.load_state_dict(ckpt["model_state_dict"])
+                    model.eval()
+                    self.model = model
+                    print(f"[LiveAgent {self.session_id}] Pretrained MOMENT-1-large Foundation Model loaded on {self.device}.")
                 else:
-                    ckpt_path = repo_root / "checkpoints" / "best_moment_15ch_lora.pt"
-                    if ckpt_path.exists():
-                        from src.models.moment_model import MOMENTClassifier, MOMENTConfig
-                        ckpt = torch.load(ckpt_path, map_location=self.device, weights_only=False)
-                        model_cfg = ckpt.get("config", None) or MOMENTConfig(
-                            n_channels=15, seq_len=64, patch_len=8, patch_stride=8,
-                            d_model=1024, num_layers=6, num_heads=16, d_ff=2816,
-                            dropout=0.2, num_classes=5, use_lora=True, lora_r=32, lora_alpha=64
-                        )
-                        model = MOMENTClassifier(model_cfg).to(self.device)
-                        model.load_state_dict(ckpt["model_state_dict"])
-                        model.eval()
-                        self.model = model
-                        print(f"[LiveAgent {self.session_id}] Legacy Baseline Model loaded on {self.device}.")
+                    print(f"[LiveAgent {self.session_id}] Warning: Checkpoint not found at {ckpt_path}")
+                    self.model = None
             except Exception as e:
-                print(f"[LiveAgent {self.session_id}] Model load error ({self.model_choice}): {e}")
+                print(f"[LiveAgent {self.session_id}] Model load error: {e}")
                 self.model = None
 
     def set_symbol(self, symbol: str):
@@ -314,36 +301,29 @@ class LiveAgent(QObject):
             self.current_trading_day = cur_day
             self.daily_losses = 0
 
-        # Model-Specific Gating
-        if self.model_choice == "pretrained":
-            # [LOCKED FINAL MODEL B RULES]
-            # 1. Daily Circuit Breaker: Halt new entries if 2 Stop Losses have occurred today
-            if getattr(self, "daily_losses", 0) >= 2:
-                return
+        # [LOCKED FINAL MOMENT-1-LARGE PRODUCTION RULES]
+        # 1. Daily Circuit Breaker: Halt new entries if 2 Stop Losses have occurred today
+        if getattr(self, "daily_losses", 0) >= 2:
+            return
 
-            # 2. [F3] Dynamic TAU -- sweep-validated optimal: ATR < 13 pip (+4pp)
-            ATR_F3_THRESHOLD = 13.0
-            effective_tau = TAU_BASE + 0.04 if atr_val < ATR_F3_THRESHOLD else TAU_BASE
+        # 2. [F3] Dynamic TAU -- sweep-validated optimal: ATR < 13 pip (+4pp)
+        ATR_F3_THRESHOLD = 13.0
+        effective_tau = TAU_BASE + 0.04 if atr_val < ATR_F3_THRESHOLD else TAU_BASE
 
-            # 3. [F6] High-Volatility Conviction Gate -- ATR >= 20 pip
-            if atr_val >= 20.0 and margin < 0.18:
-                return
+        # 3. [F6] High-Volatility Conviction Gate -- ATR >= 20 pip
+        if atr_val >= 20.0 and margin < 0.18:
+            return
 
-            # 4. [F7] Extreme Volatility Circuit Breaker -- ATR > 65.0 pip
-            if atr_val > 65.0:
-                return
+        # 4. [F7] Extreme Volatility Circuit Breaker -- ATR > 65.0 pip
+        if atr_val > 65.0:
+            return
 
-            # 5. [F4] Anti-BE-Trap -- ATR < 10 pip
-            ATR_F4_BE_GATE = 10.0
-            be_enabled = (atr_val >= ATR_F4_BE_GATE)
+        # 5. [F4] Anti-BE-Trap -- ATR < 10 pip
+        ATR_F4_BE_GATE = 10.0
+        be_enabled = (atr_val >= ATR_F4_BE_GATE)
 
-            # 6. [F5] Dynamic TP: 1.0R when ATR < 18 pip, 2.7R otherwise
-            dyn_tp_r = 1.0 if atr_val < 18.0 else 2.7
-        else:
-            # [BASELINE MODEL A RULES - LEGACY V1]
-            effective_tau = TAU_BASE
-            be_enabled = True
-            dyn_tp_r = 2.7
+        # 6. [F5] Dynamic TP: 1.0R when ATR < 18 pip, 2.7R otherwise
+        dyn_tp_r = 1.0 if atr_val < 18.0 else 2.7
 
         if action in ["BUY", "SELL"] and conf >= effective_tau and margin >= UNCERTAINTY_MARGIN:
             last_c = recent_candles[-1]
@@ -360,7 +340,7 @@ class LiveAgent(QObject):
             bid = last_c["close"]
             ask = round(bid + 0.35, 2)
 
-            model_tag = "MOMENT-PRETRAINED (LOCKED)" if self.model_choice == "pretrained" else "BASELINE-V1 (LEGACY)"
+            model_tag = "MOMENT-1-LARGE (LOCKED PRODUCTION)"
             new_pos = self.broker.open_order(
                 direction=action,
                 current_bid=bid,

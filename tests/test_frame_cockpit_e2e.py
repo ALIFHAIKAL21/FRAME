@@ -45,69 +45,39 @@ def run_e2e_test():
     assert broker.cash == 250.0, f"Expected initial cash 250.0, got {broker.cash}"
     print("[TEST 3/6] Live Trader PaperBroker verified ($250.00 cash).")
     
-    # 3.5. Test Dual-Session Real-Time Isolation & Synchronization
-    print("[TEST 4/6] Verifying Dual-Session Real-Time Isolation & Synchronization...")
-    assert hasattr(live, "broker_a") and hasattr(live, "broker_b"), "Missing dual brokers"
-    assert hasattr(live, "agent_a") and hasattr(live, "agent_b"), "Missing dual agents"
-    assert live.broker_a.session_id == "MODEL_A_LEGACY", f"Unexpected session A ID: {live.broker_a.session_id}"
-    assert live.broker_b.session_id == "MODEL_B_MOMENT", f"Unexpected session B ID: {live.broker_b.session_id}"
-    assert live.agent_a.model_choice == "legacy", f"Unexpected model choice A: {live.agent_a.model_choice}"
-    assert live.agent_b.model_choice == "pretrained", f"Unexpected model choice B: {live.agent_b.model_choice}"
+    # 3.5. Test Single Mature Locked Model Production Engine
+    print("[TEST 4/6] Verifying Mature Locked Model Production Engine...")
+    assert live.broker.session_id == "MOMENT_LOCKED_PROD", f"Unexpected session ID: {live.broker.session_id}"
+    assert live.agent.model_choice == "pretrained", f"Unexpected model choice: {live.agent.model_choice}"
+    assert live.broker.open_position is None, "Broker should start with clean 0 open position"
+    assert len(live.broker.trade_history) == 0, "Broker should start with clean 0 trades"
 
-    # Verify Session Switching
-    live._switch_active_session("A")
-    assert live.active_session == "A"
-    assert live.active_broker is live.broker_a
-    assert live.active_agent is live.agent_a
+    # Verify Arm / Standby
+    live.set_agent_armed(True)
+    assert live.agent.is_armed is True, "Arm agent failed"
+    live.set_agent_armed(False)
+    assert live.agent.is_armed is False, "Standby agent failed"
 
-    live._switch_active_session("B")
-    assert live.active_session == "B"
-    assert live.active_broker is live.broker_b
-    assert live.active_agent is live.agent_b
-
-    # Verify Synchronous Arm / Standby
-    live._arm_both_sessions()
-    assert live.agent_a.is_armed is True and live.agent_b.is_armed is True, "Arm both failed"
-    live._standby_all_sessions()
-    assert live.agent_a.is_armed is False and live.agent_b.is_armed is False, "Standby all failed"
-
-    # Verify Strict Data Isolation (Zero Data Contamination)
-    live.broker_a.reset(250.0)
-    live.broker_b.reset(250.0)
-    pos_a = live.broker_a.open_order("BUY", 2700.0, 2700.35, 10.0, reason="Test A Isolation")
-    assert pos_a["id"].startswith("MODA"), f"Expected MODA prefix, got {pos_a['id']}"
-    assert live.broker_b.open_position is None, "DATA LEAK: Model B received position from Model A!"
-
-    # Arm sessions to evaluate live ticks
-    live._arm_both_sessions()
+    # Verify Order Execution with MOMT prefix
+    live.set_agent_armed(True)
+    pos = live.broker.open_order("BUY", 2700.0, 2700.35, 10.0, reason="Test Mature Locked Model")
+    assert pos["id"].startswith("MOMT"), f"Expected MOMT prefix, got {pos['id']}"
+    assert pos["session_id"] == "MOMENT_LOCKED_PROD"
 
     # Simulate synchronous market tick
     tick = {"bid": 2708.0, "ask": 2708.35, "latency_ms": 8.5, "spread": 0.35, "time": time.time()}
     live._on_feed_tick(tick)
-    assert live.broker_a.open_position["floating_r"] > 0, "Model A position did not update on tick"
-    assert live.broker_b.open_position is None, "DATA LEAK: Model B opened unexpected position after tick"
+    assert live.broker.open_position["floating_r"] > 0, "MOMENT position did not update on tick"
 
-    # Open Model B order independently
-    pos_b = live.broker_b.open_order("SELL", 2708.0, 2708.35, 12.0, reason="Test B Isolation")
-    assert pos_b["id"].startswith("MODB"), f"Expected MODB prefix, got {pos_b['id']}"
-    assert live.broker_a.open_position is not None and live.broker_a.open_position["direction"] == "BUY"
-    assert live.broker_b.open_position is not None and live.broker_b.open_position["direction"] == "SELL"
-
-    # Close trades independently
-    trade_a = live.broker_a.close_order(2710.0, exit_reason="Target TP")
-    assert len(live.broker_a.trade_history) == 1, "Model A trade history not updated"
-    assert len(live.broker_b.trade_history) == 0, "DATA LEAK: Model A trade leaked into Model B history!"
-    assert live.broker_b.open_position is not None, "Model B position was prematurely closed"
-
-    trade_b = live.broker_b.close_order(2695.0, exit_reason="Target TP")
-    assert len(live.broker_b.trade_history) == 1, "Model B trade history not updated"
-    assert live.broker_a.trade_history[0]["session_id"] == "MODEL_A_LEGACY"
-    assert live.broker_b.trade_history[0]["session_id"] == "MODEL_B_MOMENT"
+    # Close order and verify trade
+    trade = live.broker.close_order(2710.0, exit_reason="Target TP")
+    assert len(live.broker.trade_history) == 1, "Trade history not updated"
+    assert trade["session_id"] == "MOMENT_LOCKED_PROD"
+    assert trade["win"] == 1
 
     # Clean up test positions
-    live.broker_a.reset(250.0)
-    live.broker_b.reset(250.0)
-    print("  -> Dual-Session Data Isolation & Synchronization verified with 100% mathematical zero-leakage.")
+    live.broker.reset(250.0)
+    print("  -> Mature Locked MOMENT-1-large Production Engine verified 100% cleanly.")
 
     # 4. Test Cloud Sync Worker
     client = live.cloud_client

@@ -612,15 +612,12 @@ if selected_mode == "🔴 LIVE REALTIME TRADER":
         t_tab1, t_tab2, t_tab3 = st.tabs(["📋 CLOSED TRADES (DATABASE)", "🤖 AI INFERENCE MONITOR", "⚡ KINETIC OMS AUDIT LOG"])
         
         with t_tab1:
-            col_t1, col_t2 = st.columns([3, 1])
-            sel_sess_log = col_t2.selectbox("Filter Sesi:", ["Semua Sesi", "🟢 Model B (Locked)", "🔵 Model A (Legacy)"], key="trade_log_sess")
-            sess_filter = "MODEL_B_MOMENT" if "Model B" in sel_sess_log else ("MODEL_A_LEGACY" if "Model A" in sel_sess_log else None)
-            df_trades = db.get_closed_trades_df(limit=50, session_id=sess_filter)
+            df_trades = db.get_closed_trades_df(limit=50)
             if not df_trades.empty:
-                display_cols = [c for c in ["id", "trade_id", "source", "direction", "lot_size", "entry_price", "exit_price", "net_pnl", "balance_after", "exit_reason", "close_time"] if c in df_trades.columns]
+                display_cols = [c for c in ["id", "trade_id", "direction", "lot_size", "entry_price", "exit_price", "net_pnl", "balance_after", "exit_reason", "close_time"] if c in df_trades.columns]
                 st.dataframe(df_trades[display_cols], use_container_width=True)
             else:
-                st.info("Belum ada closed trade live di database untuk sesi ini. Bot sedang memantau pasar.")
+                st.info("Belum ada closed trade live di database. Bot MOMENT-1-large sedang memantau pasar.")
 
         with t_tab2:
             df_tele = db.get_recent_telemetry_df(limit=30)
@@ -639,24 +636,14 @@ if selected_mode == "🔴 LIVE REALTIME TRADER":
 # =========================================================================
 elif selected_mode == "📊 EVALUASI LIVE TRADES (DATABASE AUDIT)":
     st.markdown("### 📊 LIVE REAL-TIME PERFORMANCE EVALUATION (DATABASE AUDIT)")
-    st.caption("Evaluasi profesional hasil trade real-time yang tersimpan di SQLite Database dengan visualisasi identik seperti backtest.")
+    st.caption("Evaluasi profesional hasil trade real-time MOMENT-1-large yang tersimpan di SQLite Database.")
 
-    c_f1, c_f2, c_f3 = st.columns([1.2, 1, 1.8])
+    c_f1, c_f2 = st.columns([1.5, 1])
     eval_scope = c_f1.selectbox("Filter Periode Evaluasi:", ["All Time (Semua Trade)", "Hari Ini (Today)", "Bulan Ini (Current Month)", "Custom Range"])
     eval_cap = c_f2.number_input("Modal Acuan Evaluasi ($):", min_value=50.0, value=250.0, step=50.0)
-    sess_choice = c_f3.selectbox("Filter Sesi Model:", [
-        "Semua Sesi (Combined Audit)",
-        "🟢 Sesi Model B: MOMENT-1-large (Locked Final)",
-        "🔵 Sesi Model A: Baseline V1 (Legacy Model)"
-    ])
-    sess_id_filter = None
-    if "Model B" in sess_choice:
-        sess_id_filter = "MODEL_B_MOMENT"
-    elif "Model A" in sess_choice:
-        sess_id_filter = "MODEL_A_LEGACY"
 
     # Pull evaluation package from DB
-    eval_data = db.get_live_trades_evaluation(initial_capital=eval_cap, session_id=sess_id_filter)
+    eval_data = db.get_live_trades_evaluation(initial_capital=eval_cap)
 
     if not eval_data.get("has_data", False):
         st.warning("⚠️ Belum ada closed trades yang tersimpan di database untuk dievaluasi. Silakan biarkan Live Trader berjalan atau jalankan simulasi trade.")

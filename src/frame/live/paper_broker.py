@@ -14,7 +14,7 @@ from src.frame.constants import (
 )
 
 class LivePaperBroker:
-    def __init__(self, initial_capital: float = 500.0, lot_mode: str = "flat", max_lot: float = 2.0, session_id: str = "SESSION_DEFAULT"):
+    def __init__(self, initial_capital: float = 250.0, lot_mode: str = "dynamic", max_lot: float = 2.0, session_id: str = "MOMENT_LOCKED_PROD"):
         self.initial_capital = float(initial_capital)
         self.cash = float(initial_capital)
         self.lot_mode = lot_mode  # "flat" or "dynamic"
@@ -85,12 +85,7 @@ class LivePaperBroker:
             be_trigger = round(entry_price - (0.75 * sl_dist), 2)
 
         now = timestamp or datetime.now(timezone.utc)
-        if "MODEL_A" in self.session_id:
-            order_prefix = "MODA"
-        elif "MODEL_B" in self.session_id:
-            order_prefix = "MODB"
-        else:
-            order_prefix = self.session_id.replace("SESSION_", "").replace("MODEL_", "")[:4].upper()
+        order_prefix = "MOMT"
         self.open_position = {
             "id": f"{order_prefix}-{int(time.time()*1000)%1000000}",
             "session_id": self.session_id,

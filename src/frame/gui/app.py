@@ -66,10 +66,10 @@ class MainWindow(QMainWindow):
         main_layout.setSpacing(8)
 
         # 1. Header Bar
-        header_frame = QFrame()
-        header_frame.setObjectName("header_frame")
-        header_frame.setStyleSheet("#header_frame { background-color: #090d14; border: 1px solid #161e2e; }")
-        h_layout = QHBoxLayout(header_frame)
+        self.header_frame = QFrame()
+        self.header_frame.setObjectName("header_frame")
+        self.header_frame.setStyleSheet("#header_frame { background-color: #090d14; border: 1px solid #161e2e; }")
+        h_layout = QHBoxLayout(self.header_frame)
         h_layout.setContentsMargins(8, 4, 8, 4)
 
         lbl_brand = QLabel("FLOWDEV FRAME // RECURRENT ALGORITHMIC TRADE ENGINE")
@@ -114,7 +114,7 @@ class MainWindow(QMainWindow):
         h_layout.addWidget(self.lbl_operator)
         h_layout.addSpacing(4)
         h_layout.addWidget(self.btn_lock)
-        main_layout.addWidget(header_frame)
+        main_layout.addWidget(self.header_frame)
 
         # 2. Main Content Splitter (Left Sidebar Controls + Right Main Stage)
         splitter = QSplitter(Qt.Horizontal)
@@ -132,14 +132,14 @@ class MainWindow(QMainWindow):
         lbl_ctrl_title.setStyleSheet("font-size: 10px; font-weight: 700; color: #8b949e; letter-spacing: 1px;")
         left_layout.addWidget(lbl_ctrl_title)
 
-        # 0. Deep Learning Model Selector
-        left_layout.addWidget(QLabel("Deep Learning Model:"))
+        # 0. Deep Learning Model (Strictly Locked to Mature Final MOMENT Model)
+        left_layout.addWidget(QLabel("Locked Neural Architecture:"))
         self.combo_model = QComboBox()
-        self.combo_model.setMaxVisibleItems(5)
         self.combo_model.addItems([
-            "MOMENT-1-large Pretrained [LOCKED PRODUCTION]",
-            "CNN-BiLSTM Baseline [LEGACY BENCHMARK]"
+            "MOMENT-1-large Pretrained [LOCKED PRODUCTION]"
         ])
+        self.combo_model.setEnabled(False)
+        self.combo_model.setStyleSheet("color: #00e676; font-weight: 800; background-color: #05140d; border: 1px solid #059669;")
         left_layout.addWidget(self.combo_model)
 
         # 1. Period Scope Selector
@@ -553,9 +553,8 @@ class MainWindow(QMainWindow):
             sizing_mode = "flat"
 
         max_lot = float(self.spin_max_lot.value())
-
-        model_choice = "pretrained" if self.combo_model.currentIndex() == 0 else "legacy"
-        model_tag = "MOMENT Pretrained" if model_choice == "pretrained" else "CNN-BiLSTM"
+        model_choice = "pretrained"
+        model_tag = "MOMENT Pretrained [LOCKED PRODUCTION]"
 
         self.btn_run.setEnabled(False)
         self.btn_export.setEnabled(False)

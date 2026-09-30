@@ -176,19 +176,28 @@ class LiveTradingWindow(QMainWindow):
 
     @property
     def active_broker(self) -> LivePaperBroker:
-        return self.broker_b if getattr(self, "active_session", "B") == "B" else self.broker_a
+        return self.broker
 
     @property
     def active_agent(self) -> LiveAgent:
-        return self.agent_b if getattr(self, "active_session", "B") == "B" else self.agent_a
+        return self.agent
+
+    # Backward compatibility aliases
+    @property
+    def broker_a(self) -> LivePaperBroker:
+        return self.broker
 
     @property
-    def broker(self) -> LivePaperBroker:
-        return self.active_broker
+    def broker_b(self) -> LivePaperBroker:
+        return self.broker
 
     @property
-    def agent(self) -> LiveAgent:
-        return self.active_agent
+    def agent_a(self) -> LiveAgent:
+        return self.agent
+
+    @property
+    def agent_b(self) -> LiveAgent:
+        return self.agent
 
     def __init__(self, operator_user: Optional[Dict[str, Any]] = None):
         super().__init__()
@@ -205,17 +214,11 @@ class LiveTradingWindow(QMainWindow):
         # [PERF] TradeAuditDB init deferred to background thread — prevents 2-5s Neon TCP block on main thread
         self.db = None  # Will be set by background thread
 
-        # Dual Real-Time Trading Engines:
-        # Session A: Model Lama / Baseline V1 (Legacy MOMENT / CNN-BiLSTM baseline)
-        self.broker_a = LivePaperBroker(initial_capital=250.0, lot_mode="dynamic", max_lot=2.0, session_id="MODEL_A_LEGACY")
-        self.agent_a = LiveAgent(broker=self.broker_a, model_choice="legacy", session_id="MODEL_A_LEGACY", session_name="Model A (Baseline V1)")
-
-        # Session B: Model Baru MOMENT yang Sudah Dikunci (Pretrained 15ch MOMENT Foundation Model)
-        self.broker_b = LivePaperBroker(initial_capital=250.0, lot_mode="dynamic", max_lot=2.0, session_id="MODEL_B_MOMENT")
-        self.agent_b = LiveAgent(broker=self.broker_b, model_choice="pretrained", session_id="MODEL_B_MOMENT", session_name="Model B (MOMENT Final Locked)")
-
-        # Active Session View: Defaults to Model B (the new locked model)
-        self.active_session: str = "B"
+        # Core Quantitative Trading Engine:
+        # Strictly Single Locked Final Model (Pretrained 15ch MOMENT-1-large Foundation Model)
+        self.broker = LivePaperBroker(initial_capital=250.0, lot_mode="dynamic", max_lot=2.0, session_id="MOMENT_LOCKED_PROD")
+        self.agent = LiveAgent(broker=self.broker, session_id="MOMENT_LOCKED_PROD", session_name="MOMENT-1-large (Locked Production)")
+        self.active_session: str = "MOMENT_LOCKED"
 
         self.feed = LiveMarketFeed(symbol="XAUUSD", poll_interval_ms=250)
 
@@ -282,227 +285,127 @@ class LiveTradingWindow(QMainWindow):
         main_layout.setSpacing(4)
 
         # -------------------------------------------------------------
-        # 1. Header Bar
+        # 1. Header Bar (Controlled by Master Cockpit)
         # -------------------------------------------------------------
-        header = QFrame()
-        header.setObjectName("header_frame")
-        header.setFixedHeight(48)
-        header.setStyleSheet("#header_frame { background-color: #050505; border: 1px solid #202020; }")
-        h_layout = QHBoxLayout(header)
-        h_layout.setContentsMargins(10, 2, 10, 2)
-        h_layout.setSpacing(6)
+        self.header_frame = QFrame()
+        self.header_frame.setObjectName("header_frame")
+        self.header_frame.setFixedHeight(46)
+        self.header_frame.setStyleSheet("#header_frame { background-color: #06090e; border: 1px solid #1a2230; border-radius: 4px; }")
+        h_layout = QHBoxLayout(self.header_frame)
+        h_layout.setContentsMargins(12, 2, 12, 2)
+        h_layout.setSpacing(8)
 
-        lbl_brand = QLabel("FLOWDEV // LIVE PAPER")
-        lbl_brand.setStyleSheet("font-size: 10.5px; font-weight: 800; color: #d4af37; letter-spacing: 1px;")
+        lbl_brand = QLabel("FLOWDEV // LIVE REALTIME TRADER")
+        lbl_brand.setStyleSheet("font-size: 11px; font-weight: 800; color: #d4af37; letter-spacing: 1px;")
 
         self.lbl_feed_status = QLabel("[FEED: INITIALIZING]")
         self.lbl_feed_status.setStyleSheet("font-size: 11px; font-family: monospace; color: #38bdf8; font-weight: 700;")
 
-        self.lbl_agent_status = QLabel("[AGENT: ARMED & HUNTING]")
-        self.lbl_agent_status.setStyleSheet("font-size: 11px; font-family: monospace; color: #00e676; font-weight: 700;")
+        self.lbl_agent_status = QLabel("[AGENT: STANDBY]")
+        self.lbl_agent_status.setStyleSheet("font-size: 11px; font-family: monospace; color: #f87171; font-weight: 700;")
 
-        lbl_hw = QLabel("[RTX 4050] [M30]")
-        lbl_hw.setStyleSheet("font-size: 10px; font-family: monospace; color: #8b949e;")
-
-        self.btn_open_web = QPushButton("CLOUD APP")
-        self.btn_open_web.setToolTip("Open 1:1 Identical Cloud Web Application (Streamlit)")
-        self.btn_open_web.setStyleSheet("""
-            QPushButton {
-                background-color: #111111; border: 1px solid #303030;
-                font-size: 10.5px; padding: 4px 10px; font-weight: 700; color: #d1d5db;
-            }
-            QPushButton:hover { background-color: #1b1b1b; border-color: #555555; color: #ffffff; }
-        """)
-        self.btn_open_web.clicked.connect(self._open_web_app)
-
-        self.btn_switch_historical = QPushButton("BACKTEST")
-        self.btn_switch_historical.setStyleSheet("""
-            QPushButton {
-                background-color: #111111; border: 1px solid #303030;
-                font-size: 10.5px; padding: 4px 10px; font-weight: 700; color: #cbd5e1;
-            }
-            QPushButton:hover { background-color: #1b1b1b; border-color: #555555; color: #f0f6fc; }
-        """)
-        self.btn_switch_historical.clicked.connect(self._open_historical_workstation)
-
-        self.lbl_operator = QLabel(f"👤 {self.operator_user.get('username', 'OPERATOR').upper()}")
-        self.lbl_operator.setToolTip(self.operator_user.get("display_name", "OPERATOR"))
-        self.lbl_operator.setStyleSheet("font-size: 10.5px; font-weight: 800; color: #38bdf8; background-color: #080808; padding: 4px 10px; border: 1px solid #262626; border-radius: 3px;")
-
-        self.btn_lock = QPushButton("LOCK")
-        self.btn_lock.setToolTip("Lock Workstation Session Immediately")
-        self.btn_lock.setStyleSheet("""
-            QPushButton {
-                background-color: #111111; border: 1px solid #333333;
-                font-size: 10px; padding: 4px 8px; font-weight: 700; color: #94a3b8; border-radius: 3px;
-            }
-            QPushButton:hover { background-color: #1c1c1c; color: #f8fafc; border-color: #ef4444; }
-        """)
-        self.btn_lock.clicked.connect(self._lock_session)
+        self.lbl_cloud_status = QLabel("[CLOUD: ONLINE 🟢]")
+        self.lbl_cloud_status.setStyleSheet("font-size: 10.5px; font-family: monospace; color: #00e676; font-weight: 700; background-color: #080808; padding: 4px 8px; border: 1px solid #262626; border-radius: 3px;")
 
         h_layout.addWidget(lbl_brand)
         h_layout.addWidget(self.lbl_feed_status)
         h_layout.addWidget(self.lbl_agent_status)
-        self.lbl_cloud_status = QLabel("[CLOUD: STANDBY 🟡]")
-        self.lbl_cloud_status.setStyleSheet("font-size: 10.5px; font-family: monospace; color: #ffd700; font-weight: 700; background-color: #080808; padding: 4px 8px; border: 1px solid #262626; border-radius: 3px;")
         h_layout.addWidget(self.lbl_cloud_status)
         h_layout.addStretch()
-        h_layout.addWidget(lbl_hw)
+
+        self.btn_open_web = QPushButton("CLOUD APP")
+        self.btn_open_web.setStyleSheet("background-color: #111111; border: 1px solid #303030; font-size: 10px; padding: 4px 8px; font-weight: 700; color: #d1d5db;")
+        self.btn_open_web.clicked.connect(self._open_web_app)
         h_layout.addWidget(self.btn_open_web)
+
+        self.btn_switch_historical = QPushButton("BACKTEST")
+        self.btn_switch_historical.setStyleSheet("background-color: #111111; border: 1px solid #303030; font-size: 10px; padding: 4px 8px; font-weight: 700; color: #cbd5e1;")
+        self.btn_switch_historical.clicked.connect(self._open_historical_workstation)
         h_layout.addWidget(self.btn_switch_historical)
-        h_layout.addWidget(self.lbl_operator)
-        h_layout.addWidget(self.btn_lock)
-        main_layout.addWidget(header)
 
-        # -------------------------------------------------------------
-        # 1.5. Dual-Session Real-Time Selector & Comparative Status Bar
-        # -------------------------------------------------------------
+        main_layout.addWidget(self.header_frame)
+
+        # Backward compatibility placeholders
         self.session_bar = QFrame()
-        self.session_bar.setObjectName("session_bar")
-        self.session_bar.setFixedHeight(50)
-        self.session_bar.setStyleSheet("""
-            #session_bar {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0a0d14, stop:1 #06090e);
-                border: 1px solid #1f2937;
-                border-radius: 4px;
-            }
-        """)
-        sb_layout = QHBoxLayout(self.session_bar)
-        sb_layout.setContentsMargins(8, 4, 8, 4)
-        sb_layout.setSpacing(8)
-
+        self.lbl_model_badge = QLabel()
+        self.lbl_model_stats = QLabel()
+        self.btn_arm_both = QPushButton()
+        self.btn_standby_both = QPushButton()
         self.btn_tab_b = QPushButton()
-        self.btn_tab_b.setCursor(Qt.PointingHandCursor)
-        self.btn_tab_b.clicked.connect(lambda: self._switch_active_session("B"))
-
         self.btn_tab_a = QPushButton()
-        self.btn_tab_a.setCursor(Qt.PointingHandCursor)
-        self.btn_tab_a.clicked.connect(lambda: self._switch_active_session("A"))
-
-        sb_layout.addWidget(self.btn_tab_b, stretch=3)
-        sb_layout.addWidget(self.btn_tab_a, stretch=3)
-
-        self.btn_arm_both = QPushButton("⚡ ARM BOTH")
-        self.btn_arm_both.setToolTip("Arm both Model A and Model B concurrently")
-        self.btn_arm_both.setStyleSheet("""
-            QPushButton {
-                background-color: #064e3b; border: 1px solid #059669; color: #a7f3d0;
-                font-size: 10px; font-weight: 800; padding: 6px 10px; border-radius: 3px; font-family: monospace;
-            }
-            QPushButton:hover { background-color: #047857; color: #ffffff; }
-        """)
-        self.btn_arm_both.clicked.connect(self._arm_both_sessions)
-
-        self.btn_standby_both = QPushButton("🛑 STANDBY ALL")
-        self.btn_standby_both.setToolTip("Pause all trading sessions safely")
-        self.btn_standby_both.setStyleSheet("""
-            QPushButton {
-                background-color: #3b0764; border: 1px solid #7e22ce; color: #e9d5ff;
-                font-size: 10px; font-weight: 800; padding: 6px 10px; border-radius: 3px; font-family: monospace;
-            }
-            QPushButton:hover { background-color: #581c87; color: #ffffff; }
-        """)
-        self.btn_standby_both.clicked.connect(self._standby_all_sessions)
-
-        sb_layout.addWidget(self.btn_arm_both)
-        sb_layout.addWidget(self.btn_standby_both)
-        main_layout.addWidget(self.session_bar)
 
         # -------------------------------------------------------------
-        # 2. Main Content Splitter
+        # 2. Main Content Splitter (Left Sidebar Controls + Right Main Stage)
         # -------------------------------------------------------------
         splitter = QSplitter(Qt.Horizontal)
 
-        # Left Panel (Controls & Parameters)
+        # Left Control Panel (Styled identically to Backtest Simulation Controls)
         left_panel = QFrame()
         left_panel.setObjectName("left_panel")
         left_panel.setFixedWidth(275)
-        left_panel.setStyleSheet("#left_panel { background-color: #070707; border: 1px solid #202020; }")
+        left_panel.setStyleSheet("#left_panel { background-color: #0d111a; border: 1px solid #1c2333; }")
         left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(10, 10, 10, 10)
-        left_layout.setSpacing(8)
+        left_layout.setContentsMargins(12, 12, 12, 12)
+        left_layout.setSpacing(10)
 
-        lbl_ctrl = QLabel("MISSION CONTROL & TARGET ASSET")
-        lbl_ctrl.setStyleSheet("font-size: 10px; font-weight: 700; color: #8b949e; letter-spacing: 1px;")
-        left_layout.addWidget(lbl_ctrl)
+        lbl_ctrl_title = QLabel("AGENT EXECUTION CONTROLS")
+        lbl_ctrl_title.setStyleSheet("font-size: 10px; font-weight: 700; color: #8b949e; letter-spacing: 1px;")
+        left_layout.addWidget(lbl_ctrl_title)
 
-        # Target Asset Selector
-        left_layout.addWidget(QLabel("SELECT TRADING PAIR:"))
+        # 0. Locked Neural Architecture
+        left_layout.addWidget(QLabel("Locked Neural Architecture:"))
+        self.combo_model = QComboBox()
+        self.combo_model.addItems([
+            "MOMENT-1-large Pretrained [LOCKED PRODUCTION]"
+        ])
+        self.combo_model.setEnabled(False)
+        self.combo_model.setStyleSheet("color: #00e676; font-weight: 800; background-color: #05140d; border: 1px solid #059669;")
+        left_layout.addWidget(self.combo_model)
+
+        # 1. Target Trading Pair
+        left_layout.addWidget(QLabel("Target Trading Pair:"))
         self.combo_asset = QComboBox()
         self.combo_asset.addItems(["XAU/USD (Spot Gold)", "BTC/USD (Bitcoin Crypto)"])
-        self.combo_asset.setStyleSheet("""
-            QComboBox {
-                background-color: #090909; border: 1px solid #292929;
-                color: #f0f6fc; font-weight: 700; padding: 5px; font-size: 11px;
-                border-radius: 3px;
-            }
-            QComboBox:hover { border-color: #00bfa5; }
-        """)
         self.combo_asset.currentIndexChanged.connect(self._on_pair_changed)
         left_layout.addWidget(self.combo_asset)
 
-        # Tactical Radar Box (Clear Direction & Readiness)
-        self.radar_box = QFrame()
-        self.radar_box.setStyleSheet("""
-            QFrame {
-                background-color: #050505; border: 1px solid #242424;
-                border-radius: 4px; padding: 6px;
-            }
-        """)
-        radar_layout = QVBoxLayout(self.radar_box)
-        radar_layout.setContentsMargins(6, 6, 6, 6)
-        radar_layout.setSpacing(3)
-
-        self.lbl_radar_pair = QLabel("TARGET: XAU/USD (Spot Gold)")
-        self.lbl_radar_pair.setStyleSheet("color: #38bdf8; font-size: 10.5px; font-weight: 700; font-family: monospace;")
-        radar_layout.addWidget(self.lbl_radar_pair)
-
-        self.lbl_radar_status = QLabel("STATUS: [ STANDBY / IDLE ]")
-        self.lbl_radar_status.setStyleSheet("color: #f87171; font-size: 10px; font-weight: 700; font-family: monospace;")
-        radar_layout.addWidget(self.lbl_radar_status)
-
-        self.lbl_radar_market = QLabel("MARKET: Forex (Weekend Shield Active)")
-        self.lbl_radar_market.setStyleSheet("color: #94a3b8; font-size: 9.5px; font-family: monospace;")
-        radar_layout.addWidget(self.lbl_radar_market)
-
-        left_layout.addWidget(self.radar_box)
-
-        # Explicit Targeted Trade Toggle
-        self.btn_toggle_agent = QPushButton("[ START AGENT TRADE (XAU/USD) ]")
-        self.btn_toggle_agent.setStyleSheet("""
-            QPushButton {
-                background-color: #004d40; border: 1px solid #00bfa5;
-                color: #ffffff; font-size: 11px; font-weight: 800; padding: 9px;
-                border-radius: 3px; letter-spacing: 0.5px;
-            }
-            QPushButton:hover { background-color: #00695c; border-color: #1de9b6; }
-        """)
-        self.btn_toggle_agent.clicked.connect(self._toggle_agent_armed)
-        left_layout.addWidget(self.btn_toggle_agent)
-
-        # Virtual Account Capital
-        left_layout.addWidget(QLabel("Simulated Capital ($ USD):"))
+        # 2. Account Capital ($250 - $500 USD)
+        left_layout.addWidget(QLabel("Account Capital ($250 - $500 USD):"))
         self.spin_capital = QDoubleSpinBox()
         self.spin_capital.setLocale(QLocale(QLocale.Language.English, QLocale.Country.UnitedStates))
-        self.spin_capital.setRange(50.0, 1000000.0)
+        self.spin_capital.setRange(250.0, 500.0)
         self.spin_capital.setSingleStep(50.0)
-        self.spin_capital.setValue(500.0)
+        self.spin_capital.setValue(250.0)
         self.spin_capital.setPrefix("$ ")
         self.spin_capital.setDecimals(2)
         self.spin_capital.setStyleSheet("font-family: 'Consolas', monospace; font-size: 11px; font-weight: 700; color: #00e676;")
         left_layout.addWidget(self.spin_capital)
 
-        # Quick Preset Buttons
+        # Quick Preset Buttons: $250 and $500
         preset_row = QHBoxLayout()
-        preset_row.setSpacing(4)
-        for val in [250, 500, 1000, 2500]:
-            b = QPushButton(f"${val}")
-            b.setStyleSheet("background-color: #101010; border: 1px solid #292929; padding: 2px; font-size: 10px; font-family: monospace; color: #8b949e;")
-            b.clicked.connect(lambda _, v=val: self._reset_capital_to(float(v)))
-            preset_row.addWidget(b)
+        preset_row.setSpacing(6)
+        for val, lot in [(250, 0.02), (500, 0.04)]:
+            btn = QPushButton(f"${val}")
+            btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #121824;
+                    border: 1px solid #1f293d;
+                    padding: 3px 2px;
+                    font-size: 10px;
+                    font-family: monospace;
+                    color: #8b949e;
+                }
+                QPushButton:hover {
+                    background-color: #1a2333;
+                    border-color: #00bfa5;
+                    color: #f0f6fc;
+                }
+            """)
+            btn.clicked.connect(lambda _, v=val, l=lot: (self._reset_capital_to(float(v)), self.spin_max_lot.setValue(l)))
+            preset_row.addWidget(btn)
         left_layout.addLayout(preset_row)
 
-        # Sizing Mode
+        # 3. Position Sizing Mode
         left_layout.addWidget(QLabel("Position Sizing Mode:"))
         self.combo_sizing = QComboBox()
         self.combo_sizing.addItems([
@@ -512,28 +415,34 @@ class LiveTradingWindow(QMainWindow):
         self.combo_sizing.currentIndexChanged.connect(self._on_sizing_changed)
         left_layout.addWidget(self.combo_sizing)
 
-        # Max Lot Cap Frame
+        # 4. Max Lot Cap Frame
         self.frame_max_lot = QFrame()
         self.frame_max_lot.setObjectName("frame_max_lot")
-        self.frame_max_lot.setStyleSheet("#frame_max_lot { background-color: #050505; border: 1px solid #242424; border-radius: 3px; }")
-        ml_layout = QVBoxLayout(self.frame_max_lot)
-        ml_layout.setContentsMargins(6, 4, 6, 4)
-        ml_layout.setSpacing(2)
-        
-        row_ml = QHBoxLayout()
-        row_ml.addWidget(QLabel("Max Lot Cap:"))
+        self.frame_max_lot.setStyleSheet("#frame_max_lot { background-color: #080c14; border: 1px solid #161e2e; border-radius: 3px; }")
+        max_lot_layout = QVBoxLayout(self.frame_max_lot)
+        max_lot_layout.setContentsMargins(6, 4, 6, 4)
+        max_lot_layout.setSpacing(3)
+
+        row_cap = QHBoxLayout()
+        row_cap.addWidget(QLabel("Max Lot Cap:"))
         self.spin_max_lot = QDoubleSpinBox()
         self.spin_max_lot.setLocale(QLocale(QLocale.Language.English, QLocale.Country.UnitedStates))
-        self.spin_max_lot.setRange(0.05, 50.0)
-        self.spin_max_lot.setValue(2.00)
+        self.spin_max_lot.setRange(0.01, 0.05)
+        self.spin_max_lot.setSingleStep(0.01)
+        self.spin_max_lot.setValue(0.02)
         self.spin_max_lot.setSuffix(" L")
+        self.spin_max_lot.setDecimals(2)
         self.spin_max_lot.setStyleSheet("font-family: monospace; font-size: 11px; font-weight: 700; color: #ffd700;")
         self.spin_max_lot.valueChanged.connect(self._on_max_lot_changed)
-        row_ml.addWidget(self.spin_max_lot)
-        ml_layout.addLayout(row_ml)
+        row_cap.addWidget(self.spin_max_lot)
+        max_lot_layout.addLayout(row_cap)
+
+        lbl_formula = QLabel("Rule: Trend Gate (EMA200) + Daily Breaker + Auto Cap Locked")
+        lbl_formula.setStyleSheet("color: #78909c; font-size: 9.0px; font-family: monospace;")
+        max_lot_layout.addWidget(lbl_formula)
         left_layout.addWidget(self.frame_max_lot)
 
-        # Feed Source Selector
+        # 5. Market Data Feed
         left_layout.addWidget(QLabel("Market Data Feed:"))
         self.combo_feed = QComboBox()
         self.combo_feed.addItems([
@@ -544,49 +453,71 @@ class LiveTradingWindow(QMainWindow):
         self.combo_feed.currentIndexChanged.connect(self._on_feed_changed)
         left_layout.addWidget(self.combo_feed)
 
-        # Telemetry info box
-        self.lbl_feed_info = QLabel("Ticks: 0 | Latency: 0.0 ms")
-        self.lbl_feed_info.setStyleSheet("background-color: #050505; border: 1px solid #242424; padding: 4px; font-size: 10px; font-family: monospace; color: #8b949e;")
-        left_layout.addWidget(self.lbl_feed_info)
-
-        # Locked Kinetic OMS Specs
+        # 6. Locked OMS Specs
         left_layout.addSpacing(4)
-        lbl_oms = QLabel("ACTIVE KINETIC OMS RULES")
-        lbl_oms.setStyleSheet("font-size: 9.5px; font-weight: 700; color: #8b949e; letter-spacing: 0.8px;")
-        left_layout.addWidget(lbl_oms)
+        lbl_oms_spec = QLabel("LOCKED OMS PARAMETERS")
+        lbl_oms_spec.setStyleSheet("font-size: 10px; font-weight: 700; color: #8b949e; letter-spacing: 1px;")
+        left_layout.addWidget(lbl_oms_spec)
 
         oms_box = QLabel(
-            "• Stage 1 : Micro-BE (+0.75R)\n"
-            "• Stage 2 : Smart Ratchet (+1.2R / 0.5R)\n"
-            "• Stage 3 : Dynamic Trailing (+1.5R)\n"
-            "• Stage 4 : Stale Decay (Bar 6 / -0.45R)\n"
-            "• Max TP  : +2.7R ($/R Ceiling)\n"
-            "• Barrier : 12 Bars (6h Cutoff)\n"
-            "• Friction: Scaled Bid/Ask Spread"
+            "• Model   : MOMENT-1-large (15-Ch)\n"
+            "• Sizing  : Dual-Mode (Cap 0.02L)\n"
+            "• Micro-BE: +0.75R (Off if ATR<10p)\n"
+            "• Ratchet : +1.2R (0.5R)\n"
+            "• Trail   : +1.5R (0.6R)\n"
+            "• Decay   : Adapt (9b <14p / 6b >=14p)\n"
+            "• Dyn TP  : 1.0R (<18p) / 2.7R (>=18p)\n"
+            "• Vol Gate: F3(13p) + F6(20p) + F7(65p)\n"
+            "• Barrier : 12 Bars (6h) / Macro EMA200"
         )
         oms_box.setObjectName("oms_box")
-        oms_box.setStyleSheet("#oms_box { background-color: #050505; border: 1px solid #242424; padding: 6px; color: #8b949e; font-family: monospace; font-size: 9.5px; line-height: 1.35; }")
+        oms_box.setStyleSheet("#oms_box { background-color: #080a10; border: 1px solid #181f2b; padding: 6px; color: #78909c; font-family: monospace; font-size: 10px; line-height: 1.3; }")
         left_layout.addWidget(oms_box)
 
         left_layout.addStretch()
 
-        # Reset Session Button
+        # Primary Action Button (Matches EXECUTE SIMULATION in Backtest)
+        self.btn_toggle_agent = QPushButton("⚡ ARM AGENT (LIVE)")
+        self.btn_toggle_agent.setStyleSheet("""
+            QPushButton {
+                background-color: #004d40;
+                border: 1px solid #00bfa5;
+                color: #ffffff;
+                font-size: 12px;
+                font-weight: 700;
+                padding: 8px;
+                letter-spacing: 0.5px;
+            }
+            QPushButton:hover {
+                background-color: #00695c;
+                border-color: #1de9b6;
+            }
+        """)
+        self.btn_toggle_agent.clicked.connect(self._toggle_agent_armed)
+        left_layout.addWidget(self.btn_toggle_agent)
+
+        # Secondary Action Button (Matches EXPORT REPORT in Backtest)
         self.btn_reset = QPushButton("RESET PAPER ACCOUNT")
-        self.btn_reset.setStyleSheet("background-color: #0d0d0d; border: 1px solid #392323; color: #f87171; font-weight: 700; padding: 6px; font-size: 10.5px;")
+        self.btn_reset.setStyleSheet("background-color: #161e2e; border: 1px solid #27334a; padding: 7px; font-size: 11px; color: #f87171;")
         self.btn_reset.clicked.connect(self._reset_account_dialog)
         left_layout.addWidget(self.btn_reset)
 
+        # Placeholders for radar widgets if referenced
+        self.lbl_radar_pair = QLabel()
+        self.lbl_radar_status = QLabel()
+        self.lbl_radar_market = QLabel()
+        self.lbl_feed_info = QLabel()
+
         splitter.addWidget(left_panel)
 
-        # Right Main Stage
+        # Right Main Stage Tabs & Panels
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(3)
+        right_layout.setSpacing(6)
 
-        # Top: Live Metrics Panel
+        # Top: Live Metrics Panel (Identical 7-Card Grid to Backtest)
         self.metrics_panel = LiveMetricsPanel()
-        self.metrics_panel.setFixedHeight(46)
         right_layout.addWidget(self.metrics_panel)
 
         # Upper: Real-Time Candlestick Chart
@@ -600,13 +531,28 @@ class LiveTradingWindow(QMainWindow):
 
         # Lower: Trade Journal & Telemetry Tabs
         self.journal_widget = LiveTradeJournalWidget()
-        self.journal_widget.setMinimumHeight(260)
+        self.journal_widget.setMinimumHeight(240)
         right_layout.addWidget(self.journal_widget, stretch=3)
 
         splitter.addWidget(right_panel)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
-        main_layout.addWidget(splitter)
+        main_layout.addWidget(splitter, stretch=1)
+
+        # 3. Bottom Terminal / Status Strip (Matches Backtest bottom_frame)
+        self.bottom_frame = QFrame()
+        self.bottom_frame.setObjectName("bottom_frame")
+        self.bottom_frame.setStyleSheet("#bottom_frame { background-color: #080a0f; border: 1px solid #161e2e; }")
+        b_layout = QHBoxLayout(self.bottom_frame)
+        b_layout.setContentsMargins(8, 4, 8, 4)
+        b_layout.setSpacing(8)
+
+        self.lbl_status_line = QLabel("[ENGINE] MOMENT-1-large Production Ready | Feed: Initializing... | Cloud: Online")
+        self.lbl_status_line.setStyleSheet("font-family: monospace; font-size: 10px; color: #8b949e;")
+        b_layout.addWidget(self.lbl_status_line)
+        b_layout.addStretch()
+
+        main_layout.addWidget(self.bottom_frame)
 
     def _wire_signals(self):
         # Chart Timeframe -> Feed & UI
@@ -622,120 +568,56 @@ class LiveTradingWindow(QMainWindow):
         self.feed.m30_candle_closed.connect(self._on_m30_candle_closed)
         self.feed.m30_history_loaded.connect(self._on_m30_history_loaded)
 
-        # Session A: Model Lama Baseline V1 Signals
-        self.agent_a.order_opened.connect(lambda pos: self._on_session_order_opened(pos, "A"))
-        self.agent_a.order_closed.connect(lambda trade: self._on_session_order_closed(trade, "A"))
-        self.agent_a.position_updated.connect(lambda pos: self._on_session_position_updated(pos, "A"))
-        self.agent_a.oms_event.connect(lambda s, d, p: self._on_session_oms_event(s, d, p, "A"))
-        self.agent_a.telemetry_updated.connect(lambda t: self._on_session_telemetry(t, "A"))
-        self.agent_a.agent_status_changed.connect(lambda a, s: self._on_session_status_changed(a, s, "A"))
-
-        # Session B: Model Baru MOMENT Final Locked Signals
-        self.agent_b.order_opened.connect(lambda pos: self._on_session_order_opened(pos, "B"))
-        self.agent_b.order_closed.connect(lambda trade: self._on_session_order_closed(trade, "B"))
-        self.agent_b.position_updated.connect(lambda pos: self._on_session_position_updated(pos, "B"))
-        self.agent_b.oms_event.connect(lambda s, d, p: self._on_session_oms_event(s, d, p, "B"))
-        self.agent_b.telemetry_updated.connect(lambda t: self._on_session_telemetry(t, "B"))
-        self.agent_b.agent_status_changed.connect(lambda a, s: self._on_session_status_changed(a, s, "B"))
+        # AI Agent Signals (Strictly locked to Pretrained MOMENT-1-large Model)
+        self.agent.order_opened.connect(self._on_order_opened)
+        self.agent.order_closed.connect(self._on_order_closed)
+        self.agent.position_updated.connect(self._on_position_updated)
+        self.agent.oms_event.connect(self._on_oms_event)
+        self.agent.telemetry_updated.connect(self._on_telemetry)
+        self.agent.agent_status_changed.connect(self._on_agent_status_changed)
 
         # Initial UI synchronization
         self._update_session_bar_ui()
         self._update_agent_button_text()
 
     # -------------------------------------------------------------
-    # Dual-Session Switching & Control Methods
+    # Production Model Control Methods
     # -------------------------------------------------------------
-    def _switch_active_session(self, session_key: str):
-        if session_key not in ["A", "B"]:
-            return
-        self.active_session = session_key
-        self._update_session_bar_ui()
+    def _switch_active_session(self, session_key: str = "B"):
         self._refresh_active_ui()
-        name = "MODEL B: MOMENT-1-LARGE (LOCKED FINAL)" if session_key == "B" else "MODEL A: BASELINE V1 (LEGACY MODEL)"
-        self.journal_widget._log_event(f"[SESSION VIEW] Switched active view to -> {name}")
+
+    def set_agent_armed(self, armed: bool):
+        self.agent.set_armed(armed)
+        self._update_agent_button_text()
+        self._update_session_bar_ui()
+        self._persist_current_state()
+        state_str = "⚡ ARMED & SCANNING M30" if armed else "🛑 PLACED ON SAFE STANDBY"
+        self.journal_widget._log_event(f"[MISSION CONTROL] MOMENT-1-large {state_str}")
 
     def _arm_both_sessions(self):
-        self.agent_a.set_armed(True)
-        self.agent_b.set_armed(True)
-        self._update_agent_button_text()
-        self._update_session_bar_ui()
-        self._persist_current_state()
-        self.journal_widget._log_event("[MISSION CONTROL] ⚡ BOTH SESSIONS ARMED & SCANNING (Model A + Model B)")
+        self.set_agent_armed(True)
 
     def _standby_all_sessions(self):
-        self.agent_a.set_armed(False)
-        self.agent_b.set_armed(False)
-        self._update_agent_button_text()
-        self._update_session_bar_ui()
-        self._persist_current_state()
-        self.journal_widget._log_event("[MISSION CONTROL] 🛑 ALL SESSIONS PLACED ON SAFE STANDBY")
+        self.set_agent_armed(False)
 
     def _update_session_bar_ui(self):
-        b_stats = self.broker_b.get_stats()
-        b_pos = self.broker_b.open_position
-        b_pnl = b_stats["net_profit"]
-        b_pnl_str = f"+${b_pnl:.2f}" if b_pnl >= 0 else f"-${abs(b_pnl):.2f}"
-        b_pos_str = f"ACTIVE {b_pos['direction']} {b_pos['lot']:.2f}L ({b_pos.get('floating_r', 0.0):+.2f}R)" if b_pos else "STANDBY (FLAT)"
-        b_arm_str = "🟢 ARMED" if self.agent_b.is_armed else "⚪ STANDBY"
+        stats = self.broker.get_stats()
+        pos = self.broker.open_position
+        stats["open_position"] = pos
+        self.metrics_panel.update_metrics(stats)
 
-        a_stats = self.broker_a.get_stats()
-        a_pos = self.broker_a.open_position
-        a_pnl = a_stats["net_profit"]
-        a_pnl_str = f"+${a_pnl:.2f}" if a_pnl >= 0 else f"-${abs(a_pnl):.2f}"
-        a_pos_str = f"ACTIVE {a_pos['direction']} {a_pos['lot']:.2f}L ({a_pos.get('floating_r', 0.0):+.2f}R)" if a_pos else "STANDBY (FLAT)"
-        a_arm_str = "🔵 ARMED" if self.agent_a.is_armed else "⚪ STANDBY"
-
-        is_b = (self.active_session == "B")
-
-        self.btn_tab_b.setText(
-            f" [SESSION B: MOMENT LOCKED (FINAL)]  {b_arm_str} | "
-            f"Eq: ${b_stats['equity']:,.2f} | PnL: {b_pnl_str} | WR: {b_stats['win_rate']:.1f}% | {b_pos_str} "
-        )
-        if is_b:
-            self.btn_tab_b.setStyleSheet("""
-                QPushButton {
-                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #064e3b, stop:1 #022c22);
-                    border: 2px solid #00e676; border-radius: 4px;
-                    color: #ecfdf5; font-size: 11px; font-weight: 800; font-family: monospace;
-                    padding: 8px 12px; text-align: left;
-                }
-            """)
-        else:
-            self.btn_tab_b.setStyleSheet("""
-                QPushButton {
-                    background-color: #0b121e; border: 1px solid #1e293b; border-radius: 4px;
-                    color: #94a3b8; font-size: 11px; font-weight: 700; font-family: monospace;
-                    padding: 8px 12px; text-align: left;
-                }
-                QPushButton:hover { background-color: #0f172a; border-color: #00e676; color: #f8fafc; }
-            """)
-
-        self.btn_tab_a.setText(
-            f" [SESSION A: BASELINE V1 (LEGACY)]  {a_arm_str} | "
-            f"Eq: ${a_stats['equity']:,.2f} | PnL: {a_pnl_str} | WR: {a_stats['win_rate']:.1f}% | {a_pos_str} "
-        )
-        if not is_b:
-            self.btn_tab_a.setStyleSheet("""
-                QPushButton {
-                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #1e3a8a, stop:1 #0f172a);
-                    border: 2px solid #38bdf8; border-radius: 4px;
-                    color: #f0f9ff; font-size: 11px; font-weight: 800; font-family: monospace;
-                    padding: 8px 12px; text-align: left;
-                }
-            """)
-        else:
-            self.btn_tab_a.setStyleSheet("""
-                QPushButton {
-                    background-color: #0b121e; border: 1px solid #1e293b; border-radius: 4px;
-                    color: #94a3b8; font-size: 11px; font-weight: 700; font-family: monospace;
-                    padding: 8px 12px; text-align: left;
-                }
-                QPushButton:hover { background-color: #0f172a; border-color: #38bdf8; color: #f8fafc; }
-            """)
+        if hasattr(self, "lbl_status_line"):
+            pos_str = f"Active Pos: {pos['direction']} {pos['lot']:.2f}L ({pos.get('floating_r', 0.0):+.2f}R)" if pos else "Position: FLAT"
+            arm_str = "ARMED" if self.agent.is_armed else "STANDBY"
+            lat = self.last_tick.get('latency_ms', 0.0) if self.last_tick else 0.0
+            sprd = self.last_tick.get('spread', 0.0) if self.last_tick else 0.0
+            self.lbl_status_line.setText(
+                f"[ENGINE] MOMENT-1-large Production Active | Agent: {arm_str} | {pos_str} | Latency: {lat:.1f}ms | Spread: ${sprd:.2f} | Ticks: {self.feed.tick_count:,}"
+            )
 
     def _refresh_active_ui(self):
-        broker = self.active_broker
-        agent = self.active_agent
+        broker = self.broker
+        agent = self.agent
         stats = broker.get_stats()
         pos = broker.open_position
 
@@ -757,7 +639,7 @@ class LiveTradingWindow(QMainWindow):
             self.journal_widget.clear_active_position()
             self.chart_widget.clear_order_lines()
 
-        # 3. Update Journal table with this session's closed trades
+        # 3. Update Journal table with closed trades
         self.journal_widget.set_trades(broker.trade_history)
 
         # 4. Update Left Panel Sizing & Capital Controls
@@ -777,13 +659,11 @@ class LiveTradingWindow(QMainWindow):
         self._update_agent_button_text()
 
     # -------------------------------------------------------------
-    # Real-Time Event Dispatchers (Synchronous Tick & Candle)
+    # Real-Time Event Dispatchers
     # -------------------------------------------------------------
     def _on_feed_tick(self, tick: dict):
         self.last_tick = tick
-        # Evaluate tick in parallel for both sessions without latency
-        self.agent_a.on_tick(tick)
-        self.agent_b.on_tick(tick)
+        self.agent.on_tick(tick)
 
         # Throttle heavy UI refresh to max 1Hz
         now = time.monotonic()
@@ -798,13 +678,13 @@ class LiveTradingWindow(QMainWindow):
             f"Sprd: ${tick.get('spread', 0):.2f}"
         )
 
-        # Refresh metrics floating equity for active view
-        stats = self.active_broker.get_stats()
+        # Refresh metrics floating equity
+        stats = self.broker.get_stats()
         dt_utc = datetime.fromtimestamp(tick.get("time", time.time()), timezone.utc)
-        cur_sess = self.active_agent.get_current_session(dt_utc)
+        cur_sess = self.agent.get_current_session(dt_utc)
         self.metrics_panel.update_metrics(stats, current_session=cur_sess or "Off-Session")
 
-        # Update comparative bar
+        # Update model status bar
         self._update_session_bar_ui()
 
     def _on_feed_candle(self, candle: dict):
@@ -823,7 +703,7 @@ class LiveTradingWindow(QMainWindow):
 
     def _on_m30_history_loaded(self, candles: list):
         self.m30_candles = list(candles)
-        self.journal_widget._log_event(f"[AI ENGINE] Loaded {len(candles)} independent M30 bars. Synchronized to both models.")
+        self.journal_widget._log_event(f"[AI ENGINE] Loaded {len(candles)} historical M30 bars for MOMENT-1-large.")
 
     def _on_m30_candle_closed(self, candle: dict):
         if len(self.m30_candles) == 0 or self.m30_candles[-1]["time"] != candle["time"]:
@@ -834,52 +714,53 @@ class LiveTradingWindow(QMainWindow):
         if len(self.m30_candles) > 120:
             self.m30_candles.pop(0)
 
-        # Trigger AI inference independently on both models
-        self.agent_a.on_candle_closed(candle, self.m30_candles)
-        self.agent_b.on_candle_closed(candle, self.m30_candles)
+        # Trigger AI inference on MOMENT model
+        self.agent.on_candle_closed(candle, self.m30_candles)
         self._update_session_bar_ui()
         if hasattr(self, "cloud_client") and self.cloud_client:
             self._sync_with_cloud_server()
 
-    def _on_session_order_opened(self, pos: dict, session_key: str):
+    def _on_order_opened(self, pos: dict):
         sl_price = float(pos.get("current_sl", pos.get("sl_price", 0.0)))
         tp_price = float(pos.get("current_tp", pos.get("tp_price", 0.0)))
         lot = float(pos.get("lot", 0.01))
         ep = float(pos.get("entry_price", 0.0))
         d = str(pos.get("direction", "BUY"))
-        sess_name = "MODEL B (LOCKED)" if session_key == "B" else "MODEL A (LEGACY)"
         live_p = self.last_tick.get("bid", ep) if d == "BUY" else self.last_tick.get("ask", ep)
 
-        # 1. Update UI if this is active view
-        if session_key == self.active_session:
-            try:
-                self.chart_widget.display_active_order(pos, live_p)
-                self.position_hud.update_position(pos, live_p)
-                self.journal_widget.update_active_position(pos, live_p)
-            except Exception as e:
-                print(f"[UI Order Error] {e}")
+        try:
+            self.chart_widget.display_active_order(pos, live_p)
+            self.position_hud.update_position(pos, live_p)
+            self.journal_widget.update_active_position(pos, live_p)
+        except Exception as e:
+            print(f"[UI Order Error] {e}")
 
-        # 2. Journal Log
         self.journal_widget._log_event(
-            f"[{sess_name}] ORDER OPENED: {d} {lot:.2f}L @ ${ep:,.2f} | "
+            f"[MOMENT] ORDER OPENED: {d} {lot:.2f}L @ ${ep:,.2f} | "
             f"SL: ${sl_price:,.2f} | TP: ${tp_price:,.2f} | ID: {pos.get('id')}"
         )
 
-        # 3. Record into Unified Audit Database
         try:
-            self.db.record_order_opened(pos, source=pos.get("session_id", f"MODEL_{session_key}"))
+            if self.db is not None:
+                self.db.record_order_opened(pos, source="MOMENT_LOCKED_PROD")
         except Exception as e:
             print(f"[DB Order Error] {e}")
 
-        # 4. Persist state
         self._persist_current_state()
         self._update_session_bar_ui()
 
-        # 5. Tray Notification
+        # Trigger compact institutional popup notification
+        try:
+            from .widgets.order_popup import LiveOrderPopup
+            popup = LiveOrderPopup(pos, parent=self)
+            popup.show_anchored(self)
+        except Exception as e:
+            print(f"[Order Popup Error] {e}")
+
         if hasattr(self, "tray_icon") and self.tray_icon is not None and self.tray_icon.isVisible():
             try:
                 self.tray_icon.showMessage(
-                    f"[{sess_name}] NEW TRADE: {d}",
+                    f"[MOMENT] NEW TRADE: {d}",
                     f"{lot:.2f}L @ ${ep:,.2f} | SL: ${sl_price:,.2f} | TP: ${tp_price:,.2f}",
                     QSystemTrayIcon.Information,
                     4000
@@ -887,85 +768,94 @@ class LiveTradingWindow(QMainWindow):
             except Exception:
                 pass
 
-    def _on_session_order_closed(self, trade: dict, session_key: str):
-        sess_name = "MODEL B (LOCKED)" if session_key == "B" else "MODEL A (LEGACY)"
+    def _on_order_closed(self, trade: dict):
         pnl = trade.get('net_pnl', 0.0)
         res_str = "PROFIT 💰" if pnl >= 0 else "LOSS 🔻"
 
-        # 1. Update UI if active view
-        if session_key == self.active_session:
-            self.chart_widget.clear_order_lines()
-            self.position_hud.set_standby(True)
-            self.journal_widget.clear_active_position()
-            self.journal_widget.add_closed_trade(trade)
-            stats = self.active_broker.get_stats()
-            self.metrics_panel.update_metrics(stats)
+        self.chart_widget.clear_order_lines()
+        self.position_hud.set_standby(True)
+        self.journal_widget.clear_active_position()
+        self.journal_widget.add_closed_trade(trade)
+        stats = self.broker.get_stats()
+        self.metrics_panel.update_metrics(stats)
 
         self.journal_widget._log_event(
-            f"[{sess_name}] TRADE CLOSED [{res_str}]: Net PnL: {'+' if pnl>=0 else ''}${pnl:.2f} USD | "
+            f"[MOMENT] TRADE CLOSED [{res_str}]: Net PnL: {'+' if pnl>=0 else ''}${pnl:.2f} USD | "
             f"Exit: ${trade.get('exit_price', 0.0):,.2f} ({trade.get('exit_reason', 'Closed')})"
         )
 
-        # 2. Record to Database
         try:
-            self.db.record_order_closed(trade)
+            if self.db is not None:
+                self.db.record_order_closed(trade)
         except Exception as e:
             print(f"[DB Order Close Error] {e}")
 
-        # 3. Persist state
         self._persist_current_state()
         self._update_session_bar_ui()
 
         if hasattr(self, "tray_icon") and self.tray_icon is not None and self.tray_icon.isVisible():
             self.tray_icon.showMessage(
-                f"[{sess_name}] TRADE CLOSED [{res_str}]",
+                f"[MOMENT] TRADE CLOSED [{res_str}]",
                 f"Net PnL: {'+' if pnl>=0 else ''}${pnl:.2f} USD",
                 QSystemTrayIcon.Information,
                 4500
             )
 
-    def _on_session_position_updated(self, pos: dict, session_key: str):
-        if session_key == self.active_session:
-            live_p = self.last_tick.get("bid", pos["entry_price"]) if pos["direction"] == "BUY" else self.last_tick.get("ask", pos["entry_price"])
-            self.position_hud.update_position(pos, live_p)
-            self.journal_widget.update_active_position(pos, live_p)
-            self.chart_widget.display_active_order(pos, live_p)
+    def _on_position_updated(self, pos: dict):
+        live_p = self.last_tick.get("bid", pos["entry_price"]) if pos["direction"] == "BUY" else self.last_tick.get("ask", pos["entry_price"])
+        self.position_hud.update_position(pos, live_p)
+        self.journal_widget.update_active_position(pos, live_p)
+        self.chart_widget.display_active_order(pos, live_p)
         self._update_session_bar_ui()
 
-    def _on_session_oms_event(self, stage: str, details: str, ref_price: float, session_key: str):
-        sess_name = "MOD-B" if session_key == "B" else "MOD-A"
-        if session_key == self.active_session:
-            self.journal_widget.log_oms_event(f"[{sess_name}] {stage}", details, ref_price)
-            if "Micro-Breakeven" in stage:
-                self.chart_widget.update_sl_line(ref_price, f"{sess_name} MICRO-BE")
-            elif "Ratchet" in stage:
-                self.chart_widget.update_sl_line(ref_price, f"{sess_name} RATCHET")
-            elif "Trailing" in stage:
-                self.chart_widget.update_sl_line(ref_price, f"{sess_name} TRAIL")
-            elif "Stale Decay" in stage:
-                self.chart_widget.update_sl_line(ref_price, f"{sess_name} STALE")
+    def _on_oms_event(self, stage: str, details: str, ref_price: float):
+        self.journal_widget.log_oms_event(f"[MOMENT] {stage}", details, ref_price)
+        if "Micro-Breakeven" in stage:
+            self.chart_widget.update_sl_line(ref_price, "MICRO-BE")
+        elif "Ratchet" in stage:
+            self.chart_widget.update_sl_line(ref_price, "RATCHET")
+        elif "Trailing" in stage:
+            self.chart_widget.update_sl_line(ref_price, "TRAIL")
+        elif "Stale Decay" in stage:
+            self.chart_widget.update_sl_line(ref_price, "STALE")
 
-        broker = self.broker_b if session_key == "B" else self.broker_a
-        trade_id = broker.open_position.get("id", "") if broker.open_position else ""
+        trade_id = self.broker.open_position.get("id", "") if self.broker.open_position else ""
         if self.db is not None:
-            self.db.record_oms_event(trade_id, f"[{sess_name}] {stage}", details, ref_price)
+            self.db.record_oms_event(trade_id, f"[MOMENT] {stage}", details, ref_price)
 
         self._persist_current_state()
         self._update_session_bar_ui()
 
-    def _on_session_telemetry(self, tele: dict, session_key: str):
-        if session_key == self.active_session:
-            self.journal_widget.update_telemetry(tele)
+    def _on_telemetry(self, tele: dict):
+        self.journal_widget.update_telemetry(tele)
         def _bg_record():
             try:
                 if self.db is None:
                     return
                 executed = tele.get("action") in ["BUY", "SELL"] and float(tele.get("conf", 0.0)) >= 32.0
-                source = "MODEL_B_MOMENT" if session_key == "B" else "MODEL_A_LEGACY"
-                self.db.record_ai_telemetry(tele, executed=executed, source=source)
+                self.db.record_ai_telemetry(tele, executed=executed, source="MOMENT_LOCKED_PROD")
             except Exception:
                 pass
         threading.Thread(target=_bg_record, daemon=True).start()
+
+    # Backward compatibility delegate methods
+    def _on_session_order_opened(self, pos: dict, session_key: str = "B"):
+        self._on_order_opened(pos)
+
+    def _on_session_order_closed(self, trade: dict, session_key: str = "B"):
+        self._on_order_closed(trade)
+
+    def _on_session_position_updated(self, pos: dict, session_key: str = "B"):
+        self._on_position_updated(pos)
+
+    def _on_session_oms_event(self, stage: str, details: str, ref_price: float, session_key: str = "B"):
+        self._on_oms_event(stage, details, ref_price)
+
+    def _on_session_telemetry(self, tele: dict, session_key: str = "B"):
+        self._on_telemetry(tele)
+
+    def _on_session_status_changed(self, armed: bool, text: str, session_key: str = "B"):
+        self._on_agent_status_changed(armed, text)
 
     def _on_session_status_changed(self, armed: bool, text: str, session_key: str):
         if session_key == self.active_session:
@@ -1069,23 +959,42 @@ class LiveTradingWindow(QMainWindow):
 
     def _update_agent_button_text(self):
         if self.agent.is_armed:
-            self.btn_toggle_agent.setText(f"[ PAUSE AGENT TRADE ({self.current_pair_display}) ]")
+            self.btn_toggle_agent.setText("🛑 PAUSE AGENT (STANDBY)")
             self.btn_toggle_agent.setStyleSheet("""
-                QPushButton { background-color: #4a1515; border: 1px solid #ef4444; color: #fca5a5; font-size: 11px; font-weight: 800; padding: 9px; border-radius: 3px; }
-                QPushButton:hover { background-color: #5c1b1b; }
+                QPushButton {
+                    background-color: #3b1016;
+                    border: 1px solid #ef4444;
+                    color: #fca5a5;
+                    font-size: 12px;
+                    font-weight: 700;
+                    padding: 8px;
+                    letter-spacing: 0.5px;
+                }
+                QPushButton:hover {
+                    background-color: #5c1822;
+                    border-color: #f87171;
+                    color: #ffffff;
+                }
             """)
-            self.lbl_radar_status.setText(f"STATUS: [ ARMED & HUNTING ON {self.current_pair_display} ]")
-            self.lbl_radar_status.setStyleSheet("color: #00e676; font-size: 10px; font-weight: 700; font-family: monospace;")
             self.lbl_agent_status.setText(f"[AGENT: ARMED ({self.current_symbol})]")
             self.lbl_agent_status.setStyleSheet("font-size: 11px; font-family: monospace; color: #00e676; font-weight: 700;")
         else:
-            self.btn_toggle_agent.setText(f"[ START AGENT TRADE ({self.current_pair_display}) ]")
+            self.btn_toggle_agent.setText("⚡ ARM AGENT (LIVE)")
             self.btn_toggle_agent.setStyleSheet("""
-                QPushButton { background-color: #004d40; border: 1px solid #00bfa5; color: #ffffff; font-size: 11px; font-weight: 800; padding: 9px; border-radius: 3px; }
-                QPushButton:hover { background-color: #00695c; }
+                QPushButton {
+                    background-color: #004d40;
+                    border: 1px solid #00bfa5;
+                    color: #ffffff;
+                    font-size: 12px;
+                    font-weight: 700;
+                    padding: 8px;
+                    letter-spacing: 0.5px;
+                }
+                QPushButton:hover {
+                    background-color: #00695c;
+                    border-color: #1de9b6;
+                }
             """)
-            self.lbl_radar_status.setText("STATUS: [ STANDBY / WAITING OPERATOR ]")
-            self.lbl_radar_status.setStyleSheet("color: #f87171; font-size: 10px; font-weight: 700; font-family: monospace;")
             self.lbl_agent_status.setText(f"[AGENT: STANDBY ({self.current_symbol})]")
             self.lbl_agent_status.setStyleSheet("font-size: 11px; font-family: monospace; color: #f87171; font-weight: 700;")
 
@@ -1151,54 +1060,37 @@ class LiveTradingWindow(QMainWindow):
         self.historical_win.activateWindow()
 
     def _persist_current_state(self):
-        """Saves current desktop operational state for both Model A and Model B."""
-        state_a = {
-            "session_id": "MODEL_A_LEGACY",
-            "model_choice": "legacy",
-            "cash": float(self.broker_a.cash),
-            "initial_capital": float(self.broker_a.initial_capital),
-            "open_position": self.broker_a.open_position,
-            "last_candle_time": getattr(self.agent_a, "last_evaluated_bar_time", 0),
-            "last_session_traded": getattr(self.agent_a, "last_session_traded", ""),
-            "is_armed": bool(self.agent_a.is_armed),
-            "symbol": getattr(self, "current_symbol", "XAUUSD"),
-            "lot_mode": getattr(self.broker_a, "lot_mode", "dynamic"),
-            "max_lot": getattr(self.broker_a, "max_lot", 2.0),
-            "updated_at_utc": datetime.now(timezone.utc).isoformat()
-        }
-        state_b = {
-            "session_id": "MODEL_B_MOMENT",
+        """Saves current desktop operational state for the locked MOMENT production model."""
+        state = {
+            "session_id": "MOMENT_LOCKED_PROD",
             "model_choice": "pretrained",
-            "cash": float(self.broker_b.cash),
-            "initial_capital": float(self.broker_b.initial_capital),
-            "open_position": self.broker_b.open_position,
-            "last_candle_time": getattr(self.agent_b, "last_evaluated_bar_time", 0),
-            "last_session_traded": getattr(self.agent_b, "last_session_traded", ""),
-            "is_armed": bool(self.agent_b.is_armed),
+            "model_name": "MOMENT-1-large Pretrained (Locked Production)",
+            "cash": float(self.broker.cash),
+            "initial_capital": float(self.broker.initial_capital),
+            "open_position": self.broker.open_position,
+            "last_candle_time": getattr(self.agent, "last_evaluated_bar_time", 0),
+            "last_session_traded": getattr(self.agent, "last_session_traded", ""),
+            "is_armed": bool(self.agent.is_armed),
             "symbol": getattr(self, "current_symbol", "XAUUSD"),
-            "lot_mode": getattr(self.broker_b, "lot_mode", "dynamic"),
-            "max_lot": getattr(self.broker_b, "max_lot", 2.0),
-            "updated_at_utc": datetime.now(timezone.utc).isoformat()
-        }
-        combined_state = {
-            "active_session": self.active_session,
-            "model_a": state_a,
-            "model_b": state_b,
-            "broker": state_b if self.active_session == "B" else state_a,
+            "lot_mode": getattr(self.broker, "lot_mode", "dynamic"),
+            "max_lot": getattr(self.broker, "max_lot", 2.0),
+            "broker": {
+                "cash": float(self.broker.cash),
+                "open_position": self.broker.open_position,
+                "stats": self.broker.get_stats()
+            },
             "updated_at_utc": datetime.now(timezone.utc).isoformat()
         }
 
         def _bg_persist():
             try:
                 if self.db is not None:
-                    self.db.save_operational_state(state_a, "STATE_MODEL_A")
-                    self.db.save_operational_state(state_b, "STATE_MODEL_B")
-                    self.db.save_operational_state(combined_state, "GLOBAL_STATE")
+                    self.db.save_operational_state(state, "GLOBAL_STATE")
 
                 state_file = pathlib.Path(r"c:\Ngoding\xau_deep_sniper\data\cloud_trader_state.json")
                 state_file.parent.mkdir(parents=True, exist_ok=True)
                 with open(state_file, "w", encoding="utf-8") as f:
-                    json.dump(combined_state, f, indent=2, default=str)
+                    json.dump(state, f, indent=2, default=str)
             except Exception as e:
                 print(f"[Persist State Error] {e}")
 
@@ -1260,8 +1152,8 @@ class LiveTradingWindow(QMainWindow):
                         }
                     t_clean = {
                         "id": d.get("trade_id", ""),
-                        "session_id": d.get("source", "MODEL_B_MOMENT"),
-                        "source": d.get("source", "MODEL_B_MOMENT"),
+                        "session_id": d.get("source", "MOMENT_LOCKED_PROD"),
+                        "source": d.get("source", "MOMENT_LOCKED_PROD"),
                         "direction": d.get("direction", "BUY"),
                         "lot": float(d.get("lot_size") or 0.01),
                         "lot_size": float(d.get("lot_size") or 0.01),
@@ -1288,16 +1180,11 @@ class LiveTradingWindow(QMainWindow):
         try:
             if not trades:
                 return
-            trades_a = [t for t in trades if t.get("source") == "MODEL_A_LEGACY" or t.get("session_id") == "MODEL_A_LEGACY"]
-            trades_b = [t for t in trades if t not in trades_a]
-            self.broker_a.trade_history = list(trades_a)
-            self.broker_b.trade_history = list(trades_b)
-
-            active_trades = self.broker_b.trade_history if self.active_session == "B" else self.broker_a.trade_history
-            self.journal_widget.load_history_trades(active_trades)
-            self.metrics_panel.update_metrics(self.active_broker.get_stats())
+            self.broker.trade_history = list(trades)
+            self.journal_widget.load_history_trades(self.broker.trade_history)
+            self.metrics_panel.update_metrics(self.broker.get_stats())
             self._update_session_bar_ui()
-            print(f"[RECOVERY] Applied {len(trades_b)} trade(s) to Model B and {len(trades_a)} trade(s) to Model A.")
+            print(f"[RECOVERY] Applied {len(trades)} trade(s) to locked MOMENT broker.")
         except Exception as e:
             print(f"[RECOVERY] Apply trades error: {e}")
 
@@ -1308,37 +1195,19 @@ class LiveTradingWindow(QMainWindow):
 
     def _apply_persisted_state(self, state_data: dict):
         try:
-            if "model_a" in state_data or "model_b" in state_data:
-                state_a = state_data.get("model_a", {})
-                state_b = state_data.get("model_b", {})
-                
-                # Apply Model A
-                if "cash" in state_a: self.broker_a.cash = float(state_a["cash"])
-                if "initial_capital" in state_a: self.broker_a.initial_capital = float(state_a["initial_capital"])
-                if "is_armed" in state_a: self.agent_a.set_armed(bool(state_a["is_armed"]))
-                if state_a.get("open_position"): self.broker_a.open_position = state_a["open_position"]
-
-                # Apply Model B
-                if "cash" in state_b: self.broker_b.cash = float(state_b["cash"])
-                if "initial_capital" in state_b: self.broker_b.initial_capital = float(state_b["initial_capital"])
-                if "is_armed" in state_b: self.agent_b.set_armed(bool(state_b["is_armed"]))
-                if state_b.get("open_position"): self.broker_b.open_position = state_b["open_position"]
-
-                if "active_session" in state_data:
-                    self.active_session = str(state_data["active_session"])
-            else:
-                if "cash" in state_data:
-                    self.broker_b.cash = float(state_data["cash"])
-                if "initial_capital" in state_data:
-                    self.broker_b.initial_capital = float(state_data["initial_capital"])
-                if "is_armed" in state_data:
-                    self.agent_b.set_armed(bool(state_data["is_armed"]))
-                if state_data.get("open_position"):
-                    self.broker_b.open_position = state_data["open_position"]
+            target_data = state_data.get("broker") or state_data.get("model_b") or state_data
+            if "cash" in target_data:
+                self.broker.cash = float(target_data["cash"])
+            if "initial_capital" in target_data:
+                self.broker.initial_capital = float(target_data["initial_capital"])
+            if "is_armed" in state_data:
+                self.agent.set_armed(bool(state_data["is_armed"]))
+            if target_data.get("open_position"):
+                self.broker.open_position = target_data["open_position"]
 
             self._refresh_active_ui()
             self._update_session_bar_ui()
-            print(f"[RECOVERY] Applied dual state: Model B (cash=${self.broker_b.cash}) | Model A (cash=${self.broker_a.cash})")
+            print(f"[RECOVERY] Applied locked MOMENT state (cash=${self.broker.cash})")
         except Exception as e:
             print(f"[RECOVERY] Apply state error: {e}")
 

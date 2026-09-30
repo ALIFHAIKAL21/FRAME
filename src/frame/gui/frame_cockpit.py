@@ -98,6 +98,9 @@ class FrameMasterCockpit(QMainWindow):
         self.lbl_cloud = self.live_workstation.lbl_cloud_status
         h_layout.addWidget(self.lbl_cloud)
 
+        self.lbl_feed = self.live_workstation.lbl_feed_status
+        h_layout.addWidget(self.lbl_feed)
+
         h_layout.addStretch()
 
         # Telemetry info
@@ -130,12 +133,16 @@ class FrameMasterCockpit(QMainWindow):
         # -------------------------------------------------------------
         self.stack = QStackedWidget()
 
-        # Tab 0: Live Trader central widget
+        # Tab 0: Live Trader central widget (Clean, duplicate internal header hidden)
         w_live = self.live_workstation.centralWidget()
+        if hasattr(self.live_workstation, "header_frame"):
+            self.live_workstation.header_frame.setVisible(False)
         self.stack.addWidget(w_live)
 
-        # Tab 1: Backtest central widget
+        # Tab 1: Backtest central widget (Clean, duplicate internal header hidden)
         w_bt = self.backtest_workstation.centralWidget()
+        if hasattr(self.backtest_workstation, "header_frame"):
+            self.backtest_workstation.header_frame.setVisible(False)
         self.stack.addWidget(w_bt)
 
         root_layout.addWidget(self.stack, stretch=1)

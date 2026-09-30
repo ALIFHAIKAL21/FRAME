@@ -18,19 +18,21 @@ from .paper_broker import LivePaperBroker
 from .feed import LiveMarketFeed
 from .agent import LiveAgent
 from .telegram_bot import LiveTelegramNotifier
+from .db_audit import TradeAuditDB
 
 class HeadlessLiveTrader:
-    def __init__(self, initial_capital: float = 500.0, lot_mode: str = "dynamic", max_lot: float = 2.0):
+    def __init__(self, initial_capital: float = 250.0, lot_mode: str = "dynamic", max_lot: float = 0.02):
         self.app = QCoreApplication.instance() or QCoreApplication(sys.argv)
         
         # Engines
-        self.broker = LivePaperBroker(initial_capital=initial_capital, lot_mode=lot_mode, max_lot=max_lot)
+        self.broker = LivePaperBroker(initial_capital=initial_capital, lot_mode=lot_mode, max_lot=max_lot, session_id="MOMENT_LOCKED_PROD")
         self.feed = LiveMarketFeed(symbol="XAUUSD", poll_interval_ms=250)
-        self.agent = LiveAgent(broker=self.broker)
+        self.agent = LiveAgent(broker=self.broker, session_id="MOMENT_LOCKED_PROD", session_name="MOMENT-1-large (Locked Production)")
         self.telegram = LiveTelegramNotifier()
+        self.db = TradeAuditDB()
 
         # State output
-        self.state_file = pathlib.Path(r"c:\Ngoding\xau_deep_sniper\logs\live_trader_state.json")
+        self.state_file = pathlib.Path(r"c:\Ngoding\xau_deep_sniper\data\cloud_trader_state.json")
         self.state_file.parent.mkdir(parents=True, exist_ok=True)
 
         self._wire_signals()
@@ -59,6 +61,7 @@ class HeadlessLiveTrader:
     def _on_candle_updated(self, candle: dict):
         self.agent.on_candle_closed(candle, self.feed.get_recent_candles() if hasattr(self.feed, 'get_recent_candles') else [])
 
+
     def _on_order_opened(self, pos: dict):
         d = pos.get('direction')
         ep = pos.get('entry_price')
@@ -67,18 +70,25 @@ class HeadlessLiveTrader:
         tp = pos.get('current_tp')
         print(f"\n>>> [EXECUTION] NEW ORDER: {d} {lot:.2f} Lot @ ${ep:.2f} | SL: ${sl:.2f} | TP: ${tp:.2f} (+2.7R) <<<")
         self.telegram.notify_order_opened(pos, self.broker.cash)
+        if self.db is not None:
+            self.db.record_order_opened(pos, source="MOMENT_LOCKED_PROD")
         self._save_state()
 
     def _on_order_closed(self, trade: dict):
         pnl = trade.get('net_pnl', 0.0)
         reason = trade.get('exit_reason', 'Closed')
         print(f"\n>>> [CLOSED] {trade.get('direction')} closed @ ${trade.get('exit_price', 0.0):.2f} | Net PnL: {'+' if pnl>=0 else ''}${pnl:.2f} ({reason}) <<<")
+        if self.db is not None:
+            self.db.record_order_closed(trade)
         stats = self.broker.get_stats()
         self.telegram.notify_order_closed(trade, stats)
         self._save_state()
 
     def _on_oms_event(self, stage: str, details: str, sl: float):
         print(f"[{datetime.now().strftime('%H:%M:%S')}] [KINETIC OMS] {stage}: {details} (New SL: ${sl:.2f})")
+        if self.db is not None:
+            trade_id = self.broker.open_position.get("id", "") if self.broker.open_position else ""
+            self.db.record_oms_event(trade_id, stage, details, sl)
         self.telegram.notify_oms_event(stage, details, sl)
         self._save_state()
 
@@ -88,6 +98,8 @@ class HeadlessLiveTrader:
         session = tele.get('session')
         if action != "HOLD":
             print(f"[{datetime.now().strftime('%H:%M:%S')}] [AI TELEMETRY] Session: {session} | Signal: {action} ({conf:.1f}%)")
+            if self.db is not None:
+                self.db.record_ai_telemetry(tele, executed=True, source="MOMENT_LOCKED_PROD")
 
     def _log_heartbeat(self):
         stats = self.broker.get_stats()
@@ -105,15 +117,27 @@ class HeadlessLiveTrader:
         try:
             stats = self.broker.get_stats()
             state = {
+                "session_id": "MOMENT_LOCKED_PROD",
+                "model_choice": "pretrained",
+                "model_name": "MOMENT-1-large Pretrained (Locked Production)",
                 "timestamp_utc": datetime.now(timezone.utc).isoformat(),
-                "balance": self.broker.cash,
+                "cash": self.broker.cash,
                 "equity": self.broker.get_equity(),
                 "initial_capital": self.broker.initial_capital,
                 "lot_mode": self.broker.lot_mode,
+                "max_lot": self.broker.max_lot,
                 "open_position": self.broker.open_position,
+                "broker": {
+                    "cash": self.broker.cash,
+                    "open_position": self.broker.open_position,
+                    "stats": stats
+                },
                 "stats": stats,
                 "recent_trades": self.broker.trade_history[-10:]
             }
+            if self.db is not None:
+                self.db.save_operational_state(state, "GLOBAL_STATE")
+
             with open(self.state_file, 'w') as f:
                 json.dump(state, f, indent=2, default=str)
         except Exception:
@@ -139,7 +163,7 @@ class HeadlessLiveTrader:
         self.app.quit()
 
 def main():
-    trader = HeadlessLiveTrader(initial_capital=500.0, lot_mode="dynamic", max_lot=2.0)
+    trader = HeadlessLiveTrader(initial_capital=250.0, lot_mode="dynamic", max_lot=0.02)
     
     # Handle graceful exit
     signal.signal(signal.SIGINT, lambda sig, frame: trader.stop())
