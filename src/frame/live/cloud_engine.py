@@ -214,6 +214,7 @@ class CloudLiveTraderEngine:
             self.last_session_traded = str(db_state.get('last_session_traded', ''))
             self.is_armed = bool(db_state.get('is_armed', True))
             self.symbol = str(db_state.get('symbol', 'XAUUSD'))
+            self.latest_telemetry = db_state.get('latest_telemetry')
             self.feed.set_symbol(self.symbol)
             return
 
@@ -228,6 +229,7 @@ class CloudLiveTraderEngine:
                     self.last_session_traded = str(state.get('last_session_traded', ''))
                     self.is_armed = bool(state.get('is_armed', True))
                     self.symbol = str(state.get('symbol', 'XAUUSD'))
+                    self.latest_telemetry = state.get('latest_telemetry')
                     self.feed.set_symbol(self.symbol)
             except Exception:
                 pass
@@ -246,6 +248,7 @@ class CloudLiveTraderEngine:
             'symbol': self.symbol,
             'lot_mode': self.broker.lot_mode,
             'max_lot': self.broker.max_lot,
+            'latest_telemetry': getattr(self, 'latest_telemetry', None),
             'broker': {
                 'cash': self.broker.cash,
                 'open_position': self.broker.open_position,
@@ -405,7 +408,7 @@ class CloudLiveTraderEngine:
             if self.last_session_traded == session_name:
                 return {'action': 'SESSION_QUOTA_FILLED', 'session': session_name, 'message': 'Max 1 trade per session'}
 
-        candles = self.feed.fetch_m30_candles(limit=64)
+        candles = self.feed.fetch_m30_candles(limit=100)
         if len(candles) >= 20:
             now_ts = int(time.time())
             # Determine latest truly closed M30 bar (exclude forming bar if still open)
@@ -431,42 +434,36 @@ class CloudLiveTraderEngine:
                 tr3 = np.abs(lows[1:] - closes[:-1])
                 tr = np.maximum(tr1, np.maximum(tr2, tr3))
                 atr14_dollar = float(np.mean(tr[-14:])) if len(tr) >= 14 else 1.50
-
-                # Convert ATR from dollar to pips for rule thresholds (1 pip XAU = $0.10)
-                atr14_pips = atr14_dollar * 10.0 if not is_btc else atr14_dollar
+                atr_val = atr14_dollar
 
                 # [LOCKED FINAL RULES -- 100% IDENTICAL TO DESKTOP AGENT]
 
-                # F7: Extreme Volatility Circuit Breaker -- ATR > 65 pips
-                if not is_btc and atr14_pips > 65.0:
-                    return {'action': 'REJECTED_EXTREME_VOL', 'message': f'ATR {atr14_pips:.1f} pips > 65.0 threshold'}
+                # F7: Extreme Volatility Circuit Breaker -- ATR > $65.0 threshold
+                if not is_btc and atr_val > 65.0:
+                    return {'action': 'REJECTED_EXTREME_VOL', 'message': f'ATR ${atr_val:.2f} > $65.0 threshold'}
 
                 # Calculate Structural SL distance (in dollar)
                 if is_btc:
-                    sl_dist = round(max(400.0, min(3500.0, SL_ATR_MULT * atr14_dollar)), 2)
+                    sl_dist = round(max(400.0, min(3500.0, SL_ATR_MULT * atr_val)), 2)
                 else:
-                    sl_dist = round(max(8.0, min(25.0, atr14_dollar * SL_ATR_MULT)), 2)
+                    sl_dist = round(max(8.0, min(25.0, atr_val * SL_ATR_MULT)), 2)
 
-                # F4: Anti-BE-Trap -- ATR < 10 pips
-                be_enabled = (atr14_pips >= 10.0)
+                # F4: Anti-BE-Trap -- ATR < 10.0
+                be_enabled = (atr_val >= 10.0)
 
-                # F5: Dynamic TP -- 1.0R when ATR < 18 pips, 2.7R otherwise
-                dyn_tp_r = 1.0 if atr14_pips < 18.0 else TP_MAX_R
+                # F5: Dynamic TP -- 1.0R when ATR < 18.0, 2.7R otherwise
+                dyn_tp_r = 1.0 if atr_val < 18.0 else TP_MAX_R
 
                 # ============================================================
                 # MOMENT-1-LARGE ONNX NEURAL NETWORK INFERENCE
                 # ============================================================
                 action, conf, probs = self._infer_onnx(eval_candles)
 
-                # F6: High-Volatility Conviction Gate -- ATR >= 20 pips
                 p_hold = probs[0] if probs is not None else 0.5
                 margin = conf - p_hold
-                if atr14_pips >= 20.0 and margin < 0.18:
-                    return {'action': 'REJECTED_LOW_CONVICTION_HIGH_VOL',
-                            'message': f'ATR {atr14_pips:.1f}p, margin {margin:.3f} < 0.18'}
 
-                # F3: Dynamic TAU -- sweep-validated: ATR < 13 pip (+4pp)
-                effective_tau = TAU_BASE + 0.04 if atr14_pips < 13.0 else TAU_BASE
+                # F3: Dynamic TAU -- sweep-validated: ATR < 13.0 (+4pp)
+                effective_tau = TAU_BASE + 0.04 if atr_val < 13.0 else TAU_BASE
 
                 # Macro Trend Filter: EMA200 M30
                 ema_weight = 2.0 / (min(len(closes), 200) + 1.0)
@@ -474,6 +471,29 @@ class CloudLiveTraderEngine:
                 for p in closes[1:]:
                     ema200 = (p * ema_weight) + (ema200 * (1.0 - ema_weight))
                 cur_close = closes[-1]
+
+                # Record live telemetry for audit and UI sync
+                self.latest_telemetry = {
+                    "time": now_utc.strftime("%Y-%m-%d %H:%M:%S UTC"),
+                    "session": session_name,
+                    "action": action,
+                    "conf": round(conf * 100, 1),
+                    "probs": [round(float(p) * 100, 1) for p in probs] if probs is not None else [],
+                    "atr": round(atr_val, 2),
+                    "sl_dist": sl_dist,
+                    "effective_tau": round(effective_tau, 2),
+                    "margin": round(margin, 3),
+                    "ema200": round(float(ema200), 2),
+                    "cur_close": round(float(cur_close), 2),
+                    "onnx_active": self.onnx_session is not None
+                }
+
+                # F6: High-Volatility Conviction Gate -- ATR >= 20.0
+                if atr_val >= 20.0 and margin < 0.18:
+                    self.save_state()
+                    return {'action': 'REJECTED_LOW_CONVICTION_HIGH_VOL',
+                            'message': f'ATR ${atr_val:.2f}, margin {margin:.3f} < 0.18',
+                            'telemetry': self.latest_telemetry}
 
                 # Final gating: action + confidence + margin + EMA200 trend
                 if action in ['BUY', 'SELL'] and conf >= effective_tau and margin >= UNCERTAINTY_MARGIN:
@@ -490,10 +510,9 @@ class CloudLiveTraderEngine:
                         current_ask=ask,
                         sl_dist=sl_dist,
                         timestamp=now_utc,
-                        reason=f'[MOMENT-1-LARGE ONNX (LOCKED PRODUCTION)] {action} ({conf*100:.1f}%) | ATR={atr14_pips:.0f}p | TP={dyn_tp_r:.1f}R ({session_name})'
+                        reason=f'[MOMENT-1-LARGE ONNX (LOCKED PRODUCTION)] {action} ({conf*100:.1f}%) | ATR=${atr_val:.2f} | TP={dyn_tp_r:.1f}R ({session_name})'
                     )
-                    order['atr'] = atr14_dollar
-                    order['atr_pips'] = atr14_pips
+                    order['atr'] = atr_val
                     order['dyn_tp_r'] = dyn_tp_r
                     order['model_conf'] = round(conf, 4)
                     order['model_probs'] = [round(float(p), 4) for p in probs] if probs is not None else []
@@ -502,10 +521,10 @@ class CloudLiveTraderEngine:
                     self.last_session_traded = session_name
                     self.db.record_order_opened(order, source='MOMENT_ONNX_PROD')
                     self.telegram.send_trade_alert('OPEN', order)
-                    events.append(f'OPENED {action} {order.get("lot", 0.02):.2f}L at {order["entry_price"]} | SL: {order.get("current_sl", 0.0)} | ATR: {atr14_pips:.1f}p | Conf: {conf*100:.1f}% | TP: {dyn_tp_r:.1f}R')
+                    events.append(f'OPENED {action} {order.get("lot", 0.02):.2f}L at {order["entry_price"]} | SL: {order.get("current_sl", 0.0)} | ATR: ${atr_val:.2f} | Conf: {conf*100:.1f}% | TP: {dyn_tp_r:.1f}R')
                     self.save_state()
-                    return {'action': 'ORDER_OPENED', 'order': order, 'events': events}
+                    return {'action': 'ORDER_OPENED', 'order': order, 'events': events, 'telemetry': self.latest_telemetry}
 
         self.save_state()
         return {'action': 'STANDBY_SCANNING', 'session': session_name, 'bid': bid, 'ask': ask,
-                'onnx_active': self.onnx_session is not None}
+                'onnx_active': self.onnx_session is not None, 'telemetry': getattr(self, 'latest_telemetry', None)}

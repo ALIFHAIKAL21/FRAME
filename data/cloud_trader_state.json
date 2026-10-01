@@ -3,15 +3,15 @@
   "model_choice": "pretrained",
   "model_name": "MOMENT-1-large Pretrained (Locked Production)",
   "cash": 250.0,
-  "equity": 250.0,
   "initial_capital": 250.0,
-  "lot_mode": "dynamic",
-  "max_lot": 2.0,
   "open_position": null,
   "last_candle_time": 0,
   "last_session_traded": "",
   "is_armed": true,
   "symbol": "XAUUSD",
+  "lot_mode": "dynamic",
+  "max_lot": 0.02,
+  "latest_telemetry": null,
   "broker": {
     "cash": 250.0,
     "open_position": null,
@@ -31,5 +31,6 @@
       "has_open_position": false,
       "open_position": null
     }
-  }
+  },
+  "updated_at_utc": "2026-10-01T11:21:33.644892+00:00"
 }
