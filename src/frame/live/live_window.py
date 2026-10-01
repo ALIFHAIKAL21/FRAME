@@ -137,14 +137,24 @@ class CloudSyncWorker(QObject):
             try:
                 # 1. Primary: Direct high-speed sync from Neon Cloud Database
                 parent_win = self.parent()
-                if parent_win and hasattr(parent_win, "db"):
+                if parent_win and hasattr(parent_win, "db") and parent_win.db is not None:
                     db_state = parent_win.db.get_operational_state("GLOBAL_STATE")
                     if db_state and isinstance(db_state, dict):
                         db_state["status"] = "online"
-                        db_state["broker"] = {
-                            "cash": float(db_state.get("cash", 250.0)),
-                            "open_position": db_state.get("open_position")
-                        }
+                        broker_dict = db_state.get("broker")
+                        if not isinstance(broker_dict, dict):
+                            broker_dict = {}
+                        broker_dict["cash"] = float(db_state.get("cash", broker_dict.get("cash", 250.0)))
+                        broker_dict["open_position"] = db_state.get("open_position")
+                        db_state["broker"] = broker_dict
+
+                        # Also fetch fresh closed trades so desktop journal and equity sync in real time
+                        try:
+                            fresh_trades = parent_win._fetch_persisted_trades_data(db=parent_win.db)
+                            parent_win._trades_loaded.emit(fresh_trades)
+                        except Exception:
+                            pass
+
                         self.state_ready.emit(db_state)
                         return
 
@@ -885,9 +895,6 @@ class LiveTradingWindow(QMainWindow):
         self.lbl_cloud_status.setStyleSheet("font-size: 10.5px; font-family: monospace; color: #00e676; font-weight: 700; background-color: #080808; padding: 4px 8px; border: 1px solid #262626; border-radius: 3px;")
         
         b_info = state.get("broker", {})
-        if "stats" in b_info:
-            self.metrics_panel.update_metrics(b_info["stats"])
-        
         if "cash" in b_info:
             self.active_broker.cash = float(b_info["cash"])
 
@@ -902,9 +909,21 @@ class LiveTradingWindow(QMainWindow):
             self.position_hud.set_standby(True)
             self.chart_widget.clear_order_lines()
 
+        if "stats" in b_info and b_info["stats"]:
+            self.metrics_panel.update_metrics(b_info["stats"])
+        else:
+            self.metrics_panel.update_metrics(self.active_broker.get_stats())
+
         cloud_armed = state.get("is_armed")
         if cloud_armed is not None and cloud_armed != self.active_agent.is_armed:
             self.active_agent.set_armed(cloud_armed)
+
+        tele = state.get("latest_telemetry")
+        if tele and isinstance(tele, dict):
+            t_time = tele.get("time")
+            if t_time and t_time != getattr(self, "_last_cloud_tele_time", ""):
+                self._last_cloud_tele_time = t_time
+                self.journal_widget.update_telemetry(tele)
 
     def _on_cloud_sync_failed(self):
         self.lbl_cloud_status.setText("[DESKTOP LOCAL 🟡]")
@@ -1025,6 +1044,7 @@ class LiveTradingWindow(QMainWindow):
     def _reset_capital_to(self, val: float):
         self.spin_capital.setValue(val)
         self.broker.reset(new_capital=val)
+        self.journal_widget.tbl_trades.setRowCount(0)
         self.metrics_panel.update_metrics(self.broker.get_stats())
         self.journal_widget._log_event(f"[ACCOUNT] Reset simulated capital to ${val:,.2f} USD")
         self._persist_current_state()
@@ -1044,6 +1064,21 @@ class LiveTradingWindow(QMainWindow):
             self.metrics_panel.update_metrics(self.broker.get_stats())
             self.journal_widget._log_event(f"[ACCOUNT] Full paper account reset to ${cap:,.2f} USD")
             self._persist_current_state()
+
+            # Clean live_trades and oms_audit_log from database in background
+            if self.db is not None:
+                def _bg_clear_db():
+                    try:
+                        with self.db._get_connection() as conn:
+                            cur = conn.cursor()
+                            cur.execute("DELETE FROM live_trades")
+                            cur.execute("DELETE FROM oms_audit_log")
+                            conn.commit()
+                        print("[ACCOUNT] Cleaned database live_trades and oms_audit_log.")
+                    except Exception as e:
+                        print(f"[RESET DB ERROR] {e}")
+                threading.Thread(target=_bg_clear_db, daemon=True).start()
+
             if hasattr(self, "cloud_client") and self.cloud_client:
                 threading.Thread(target=lambda: self.cloud_client.reset(cap), daemon=True).start()
 
@@ -1180,13 +1215,20 @@ class LiveTradingWindow(QMainWindow):
 
     def _apply_persisted_trades(self, trades: list):
         try:
-            if not trades:
-                return
-            self.broker.trade_history = list(trades)
-            self.journal_widget.load_history_trades(self.broker.trade_history)
-            self.metrics_panel.update_metrics(self.broker.get_stats())
-            self._update_session_bar_ui()
-            print(f"[RECOVERY] Applied {len(trades)} trade(s) to locked MOMENT broker.")
+            incoming = list(trades) if trades else []
+            current_len = len(self.broker.trade_history)
+            new_len = len(incoming)
+            # Update whenever trade count differs or if initializing with 0
+            if current_len != new_len or (current_len == 0 and not hasattr(self, "_trades_init_done")):
+                self._trades_init_done = True
+                self.broker.trade_history = incoming
+                self.journal_widget.load_history_trades(self.broker.trade_history)
+                self.metrics_panel.update_metrics(self.broker.get_stats())
+                self._update_session_bar_ui()
+                if incoming:
+                    print(f"[RECOVERY] Applied {len(incoming)} trade(s) to locked MOMENT broker.")
+                else:
+                    print("[RECOVERY] Trade ledger is clean (0 historical trades).")
         except Exception as e:
             print(f"[RECOVERY] Apply trades error: {e}")
 

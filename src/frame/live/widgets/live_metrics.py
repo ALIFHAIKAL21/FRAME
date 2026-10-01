@@ -86,8 +86,8 @@ class LiveMetricsPanel(QWidget):
         pf = float(stats.get("profit_factor", 0.0))
         dd = float(stats.get("max_drawdown", 0.0))
         trades = int(stats.get("total_trades", 0))
-        wins = int(stats.get("winning_trades", 0))
-        losses = int(stats.get("losing_trades", 0))
+        wins = int(stats.get("wins") if "wins" in stats else stats.get("winning_trades", 0))
+        losses = int(stats.get("losses") if "losses" in stats else stats.get("losing_trades", 0))
 
         # 1. Equity
         eq_color = "#00e676" if equity >= cash else "#ff5252"

@@ -488,6 +488,16 @@ class CloudLiveTraderEngine:
                     "onnx_active": self.onnx_session is not None
                 }
 
+                # Persist telemetry to Neon Cloud Database
+                try:
+                    self.db.record_ai_telemetry(
+                        self.latest_telemetry,
+                        executed=(action in ['BUY', 'SELL']),
+                        source='MOMENT_ONNX_PROD'
+                    )
+                except Exception:
+                    pass
+
                 # F6: High-Volatility Conviction Gate -- ATR >= 20.0
                 if atr_val >= 20.0 and margin < 0.18:
                     self.save_state()
