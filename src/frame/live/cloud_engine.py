@@ -1,11 +1,17 @@
 # FLOWDEV FRAME - 24/7 Autonomous Cloud Live Trading Engine
 # Serverless execution on Streamlit Community Cloud + Cron-Job.org.
+# Neural network inference via ONNX Runtime (CPU-only, no PyTorch needed).
 
 import os, sys, time, json, math, pathlib
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 import pandas as pd
 import numpy as np
+
+try:
+    import onnxruntime as ort
+except ImportError:
+    ort = None
 
 _ROOT = pathlib.Path(__file__).resolve().parent.parent.parent.parent
 if str(_ROOT) not in sys.path:
@@ -15,13 +21,14 @@ from src.frame.constants import (
     INITIAL_EQUITY, FIXED_LOT, CONTRACT_SIZE, SPREAD_PIPS, SLIPPAGE_PIPS,
     COMMISSION_PER_LOT, SL_ATR_MULT, TP_MAX_R, BE_TRIGGER_R, BE_BUFFER_PRICE,
     RATCHET_TRIGGER_R, RATCHET_12_R, TRAIL_TRIGGER_R, TRAIL_DIST_R,
-    STALE_DECAY_BARS, TIME_BARRIER_BARS
+    STALE_DECAY_BARS, TIME_BARRIER_BARS, TAU_BASE, UNCERTAINTY_MARGIN
 )
 from src.frame.live.db_audit import TradeAuditDB
 from src.frame.live.paper_broker import LivePaperBroker
 from src.frame.live.telegram_bot import LiveTelegramNotifier
 
 STATE_FILE = _ROOT / 'data' / 'cloud_trader_state.json'
+ONNX_MODEL_PATH = _ROOT / 'checkpoints' / 'moment_15ch_production.onnx'
 
 class CloudMarketFeed:
     def __init__(self, symbol: str = "XAUUSD"):
@@ -105,7 +112,97 @@ class CloudLiveTraderEngine:
         self.is_armed = True
         self.daily_sl_count = 0
         self.last_sl_date = ''
+        self.onnx_session = None
+        self._load_onnx_model()
         self.load_state()
+
+    def _load_onnx_model(self):
+        """Load MOMENT-1-large ONNX model for CPU inference."""
+        if ort is None:
+            print('[CloudEngine] WARNING: onnxruntime not installed. Neural inference disabled.')
+            return
+        if not ONNX_MODEL_PATH.exists():
+            print(f'[CloudEngine] WARNING: ONNX model not found at {ONNX_MODEL_PATH}')
+            return
+        try:
+            sess_options = ort.SessionOptions()
+            sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+            sess_options.intra_op_num_threads = 1  # Minimal CPU for cloud
+            self.onnx_session = ort.InferenceSession(
+                str(ONNX_MODEL_PATH),
+                sess_options=sess_options,
+                providers=['CPUExecutionProvider']
+            )
+            print(f'[CloudEngine] ONNX MOMENT-1-large loaded ({ONNX_MODEL_PATH.stat().st_size/(1024*1024):.1f} MB)')
+        except Exception as e:
+            print(f'[CloudEngine] ONNX load error: {e}')
+            self.onnx_session = None
+
+    def _infer_onnx(self, candles: list) -> tuple:
+        """
+        Run MOMENT-1-large ONNX inference on 64 candles.
+        Returns (action, confidence, probs) — identical logic to agent.py _infer_signal.
+        Feature extraction is 100% identical to desktop agent.
+        """
+        if self.onnx_session is None or len(candles) < 64:
+            return 'HOLD', 0.20, None
+
+        try:
+            bars = candles[-64:]
+            c = np.array([b['close'] for b in bars], dtype=np.float32)
+            h = np.array([b['high'] for b in bars], dtype=np.float32)
+            l = np.array([b['low'] for b in bars], dtype=np.float32)
+            o = np.array([b['open'] for b in bars], dtype=np.float32)
+            v = np.array([b.get('volume', 0) for b in bars], dtype=np.float32)
+
+            # Moving averages for normalization
+            ma9 = pd.Series(c).rolling(9, min_periods=1).mean().values.astype(np.float32)
+            ma21 = pd.Series(c).rolling(21, min_periods=1).mean().values.astype(np.float32)
+            spread_ma = (ma9 - ma21) / (np.std(c) + 1e-6)
+
+            # Build 15-channel normalized feature matrix (identical to agent.py)
+            feat = np.zeros((15, 64), dtype=np.float32)
+            norm_base = ma21
+            feat[0] = (o - norm_base) / 10.0
+            feat[1] = (h - norm_base) / 10.0
+            feat[2] = (l - norm_base) / 10.0
+            feat[3] = (c - norm_base) / 10.0
+            feat[4] = (v - np.mean(v)) / (np.std(v) + 1e-6)
+            feat[5] = spread_ma
+            feat[6] = np.clip(spread_ma * 0.8, -1.0, 1.0)
+            feat[7] = np.gradient(spread_ma)
+            feat[8] = np.where(spread_ma > 0.5, 1.0, np.where(spread_ma < -0.5, -1.0, 0.0))
+            feat[9] = np.where(c > ma9, 1.0, -1.0)
+            feat[10] = np.where(h > np.roll(h, 1), 1.0, -1.0)
+            feat[11] = (c - np.min(l)) / (np.max(h) - np.min(l) + 1e-6) * 2.0 - 1.0
+            feat[12] = np.clip((c[-1] - c[0]) / 20.0, -1.0, 1.0)
+            feat[13] = 1.0 if c[-1] > ma21[-1] else -1.0
+            feat[14] = np.clip(np.mean(feat[0:4], axis=0), -1.0, 1.0)
+
+            # ONNX inference: (1, 15, 64) -> (1, 5) logits
+            x = feat[np.newaxis, :, :]  # (1, 15, 64)
+            logits = self.onnx_session.run(['logits'], {'features': x})[0][0]  # (5,)
+
+            # Softmax
+            exp_logits = np.exp(logits - np.max(logits))
+            probs = exp_logits / exp_logits.sum()
+
+            # Parse: [HOLD, BUY_1R, BUY_2R, SELL_1R, SELL_2R]
+            p_hold = float(probs[0])
+            t_probs = probs[1:]  # directional probabilities
+            max_i = int(np.argmax(t_probs))
+            conf = float(t_probs[max_i])
+            direction = 'BUY' if max_i in [0, 1] else 'SELL'
+            margin = conf - p_hold
+
+            # Quantitative Gating
+            if conf < TAU_BASE or margin < UNCERTAINTY_MARGIN:
+                return 'HOLD', p_hold, probs.tolist()
+
+            return direction, conf, probs.tolist()
+        except Exception as e:
+            print(f'[CloudEngine] ONNX inference error: {e}')
+            return 'HOLD', 0.20, None
 
     def load_state(self):
         # 1. Primary: Load from Neon Cloud PostgreSQL
@@ -338,20 +435,11 @@ class CloudLiveTraderEngine:
                 # Convert ATR from dollar to pips for rule thresholds (1 pip XAU = $0.10)
                 atr14_pips = atr14_dollar * 10.0 if not is_btc else atr14_dollar
 
-                # [LOCKED FINAL RULES — 100% IDENTICAL TO DESKTOP AGENT]
+                # [LOCKED FINAL RULES -- 100% IDENTICAL TO DESKTOP AGENT]
 
-                # F7: Extreme Volatility Circuit Breaker — ATR > 65 pips
+                # F7: Extreme Volatility Circuit Breaker -- ATR > 65 pips
                 if not is_btc and atr14_pips > 65.0:
                     return {'action': 'REJECTED_EXTREME_VOL', 'message': f'ATR {atr14_pips:.1f} pips > 65.0 threshold'}
-
-                # F6: High-Volatility Conviction Gate — ATR >= 20 pips (needs margin check)
-                # Cloud uses momentum diff as proxy for conviction margin
-                fast_ma = np.mean(closes[-8:])
-                slow_ma = np.mean(closes[-24:])
-                diff = (fast_ma - slow_ma) / max(atr14_dollar, 0.50)
-
-                if atr14_pips >= 20.0 and abs(diff) < 0.18:
-                    return {'action': 'REJECTED_LOW_CONVICTION_HIGH_VOL', 'message': f'ATR {atr14_pips:.1f}p with weak momentum {abs(diff):.3f}'}
 
                 # Calculate Structural SL distance (in dollar)
                 if is_btc:
@@ -359,11 +447,26 @@ class CloudLiveTraderEngine:
                 else:
                     sl_dist = round(max(8.0, min(25.0, atr14_dollar * SL_ATR_MULT)), 2)
 
-                # F4: Anti-BE-Trap — ATR < 10 pips
+                # F4: Anti-BE-Trap -- ATR < 10 pips
                 be_enabled = (atr14_pips >= 10.0)
 
-                # F5: Dynamic TP — 1.0R when ATR < 18 pips, 2.7R otherwise
+                # F5: Dynamic TP -- 1.0R when ATR < 18 pips, 2.7R otherwise
                 dyn_tp_r = 1.0 if atr14_pips < 18.0 else TP_MAX_R
+
+                # ============================================================
+                # MOMENT-1-LARGE ONNX NEURAL NETWORK INFERENCE
+                # ============================================================
+                action, conf, probs = self._infer_onnx(eval_candles)
+
+                # F6: High-Volatility Conviction Gate -- ATR >= 20 pips
+                p_hold = probs[0] if probs is not None else 0.5
+                margin = conf - p_hold
+                if atr14_pips >= 20.0 and margin < 0.18:
+                    return {'action': 'REJECTED_LOW_CONVICTION_HIGH_VOL',
+                            'message': f'ATR {atr14_pips:.1f}p, margin {margin:.3f} < 0.18'}
+
+                # F3: Dynamic TAU -- sweep-validated: ATR < 13 pip (+4pp)
+                effective_tau = TAU_BASE + 0.04 if atr14_pips < 13.0 else TAU_BASE
 
                 # Macro Trend Filter: EMA200 M30
                 ema_weight = 2.0 / (min(len(closes), 200) + 1.0)
@@ -372,35 +475,37 @@ class CloudLiveTraderEngine:
                     ema200 = (p * ema_weight) + (ema200 * (1.0 - ema_weight))
                 cur_close = closes[-1]
 
-                # F3: Dynamic Tau threshold — tau = 0.36 baseline, +0.04 on low ATR < 13 pips
-                tau = 0.36 if atr14_pips >= 13.0 else 0.40
+                # Final gating: action + confidence + margin + EMA200 trend
+                if action in ['BUY', 'SELL'] and conf >= effective_tau and margin >= UNCERTAINTY_MARGIN:
+                    # EMA200 trend gate
+                    if action == 'BUY' and cur_close < ema200:
+                        action = 'HOLD'  # Counter-trend rejection
+                    elif action == 'SELL' and cur_close > ema200:
+                        action = 'HOLD'  # Counter-trend rejection
 
-                signal = None
-                if diff > tau and cur_close >= ema200:
-                    signal = 'BUY'
-                elif diff < -tau and cur_close <= ema200:
-                    signal = 'SELL'
-
-                if signal:
+                if action in ['BUY', 'SELL']:
                     order = self.broker.open_order(
-                        direction=signal,
+                        direction=action,
                         current_bid=bid,
                         current_ask=ask,
                         sl_dist=sl_dist,
                         timestamp=now_utc,
-                        reason=f'[MOMENT-1-LARGE (LOCKED PRODUCTION)] Cloud Autonomous Signal ({session_name})'
+                        reason=f'[MOMENT-1-LARGE ONNX (LOCKED PRODUCTION)] {action} ({conf*100:.1f}%) | ATR={atr14_pips:.0f}p | TP={dyn_tp_r:.1f}R ({session_name})'
                     )
                     order['atr'] = atr14_dollar
                     order['atr_pips'] = atr14_pips
                     order['dyn_tp_r'] = dyn_tp_r
+                    order['model_conf'] = round(conf, 4)
+                    order['model_probs'] = [round(float(p), 4) for p in probs] if probs is not None else []
                     if not be_enabled:
                         order['be_force_disabled'] = True
                     self.last_session_traded = session_name
-                    self.db.record_order_opened(order, source='MOMENT_LOCKED_PROD')
+                    self.db.record_order_opened(order, source='MOMENT_ONNX_PROD')
                     self.telegram.send_trade_alert('OPEN', order)
-                    events.append(f'OPENED {signal} {order.get("lot", 0.02):.2f}L at {order["entry_price"]} | SL: {order.get("current_sl", 0.0)} | ATR: {atr14_pips:.1f}p | TP: {dyn_tp_r:.1f}R')
+                    events.append(f'OPENED {action} {order.get("lot", 0.02):.2f}L at {order["entry_price"]} | SL: {order.get("current_sl", 0.0)} | ATR: {atr14_pips:.1f}p | Conf: {conf*100:.1f}% | TP: {dyn_tp_r:.1f}R')
                     self.save_state()
                     return {'action': 'ORDER_OPENED', 'order': order, 'events': events}
 
         self.save_state()
-        return {'action': 'STANDBY_SCANNING', 'session': session_name, 'bid': bid, 'ask': ask}
+        return {'action': 'STANDBY_SCANNING', 'session': session_name, 'bid': bid, 'ask': ask,
+                'onnx_active': self.onnx_session is not None}

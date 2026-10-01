@@ -27,11 +27,12 @@ logs/
 .DS_Store
 Thumbs.db
 scratch/
-checkpoints/
+checkpoints/*.pt
+checkpoints/*.pth
+checkpoints/*.safetensors
 *.pt
 *.pth
 *.bin
 *.npy
-*.onnx
 data/processed/
 logs/*
