@@ -1097,6 +1097,17 @@ class LiveTradingWindow(QMainWindow):
         threading.Thread(target=_bg_persist, daemon=True).start()
 
     def _fetch_persisted_state_data(self) -> Optional[dict]:
+        # 1. Primary: Direct sync from Neon Cloud Database (Fresh 24/7 source of truth)
+        if self.db is not None:
+            try:
+                state_data = self.db.get_operational_state("GLOBAL_STATE")
+                if state_data and isinstance(state_data, dict):
+                    print("[RECOVERY] State loaded from Neon Cloud Database.")
+                    return state_data
+            except Exception:
+                pass
+
+        # 2. Secondary: Local disk JSON backup
         state_file = pathlib.Path(r"c:\Ngoding\xau_deep_sniper\data\cloud_trader_state.json")
         if state_file.exists():
             try:
@@ -1105,15 +1116,6 @@ class LiveTradingWindow(QMainWindow):
                 if data and isinstance(data, dict):
                     print("[RECOVERY] State loaded from local JSON backup.")
                     return data
-            except Exception:
-                pass
-
-        if self.db is not None:
-            try:
-                state_data = self.db.get_operational_state("GLOBAL_STATE")
-                if state_data:
-                    print("[RECOVERY] State loaded from database.")
-                    return state_data
             except Exception:
                 pass
 

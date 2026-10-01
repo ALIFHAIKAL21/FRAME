@@ -62,7 +62,7 @@ class TradeAuditDB:
         # Attempt PostgreSQL connection
         if HAS_PSYCOPG2 and self.database_url:
             try:
-                conn = psycopg2.connect(self.database_url, connect_timeout=1)
+                conn = psycopg2.connect(self.database_url, connect_timeout=8)
                 conn.close()
                 self.is_postgres = True
             except Exception as e:
@@ -559,31 +559,38 @@ class TradeAuditDB:
     # -------------------------------------------------------------
     # Query & Analytics Operations
     # -------------------------------------------------------------
+    def _read_sql_df(self, query: str, params: Optional[tuple] = None) -> pd.DataFrame:
+        """Executes query and returns DataFrame safely across SQLite and PostgreSQL RealDictCursor."""
+        with self._get_connection() as conn:
+            cur = conn.cursor()
+            if params:
+                cur.execute(query, params)
+            else:
+                cur.execute(query)
+            rows = cur.fetchall()
+            if not rows:
+                if cur.description:
+                    return pd.DataFrame(columns=[d[0] for d in cur.description])
+                return pd.DataFrame()
+            return pd.DataFrame([dict(r) for r in rows])
+
     def get_closed_trades_df(self, limit: int = 100, session_id: Optional[str] = None) -> pd.DataFrame:
         """Retrieves closed trades as a pandas DataFrame for reporting."""
-        with self._get_connection() as conn:
-            if session_id:
-                if self.is_postgres:
-                    query = "SELECT * FROM live_trades WHERE status = 'CLOSED' AND source = %s ORDER BY id DESC LIMIT %s"
-                    return pd.read_sql_query(query, conn, params=(session_id, int(limit)))
-                else:
-                    query = "SELECT * FROM live_trades WHERE status = 'CLOSED' AND source = ? ORDER BY id DESC LIMIT ?"
-                    return pd.read_sql_query(query, conn, params=(session_id, int(limit)))
-            query = f"SELECT * FROM live_trades WHERE status = 'CLOSED' ORDER BY id DESC LIMIT {int(limit)}"
-            return pd.read_sql_query(query, conn)
+        ph = "%s" if self.is_postgres else "?"
+        if session_id:
+            query = f"SELECT * FROM live_trades WHERE status = 'CLOSED' AND source = {ph} ORDER BY id DESC LIMIT {int(limit)}"
+            return self._read_sql_df(query, (session_id,))
+        query = f"SELECT * FROM live_trades WHERE status = 'CLOSED' ORDER BY id DESC LIMIT {int(limit)}"
+        return self._read_sql_df(query)
 
     def get_all_trades_df(self, limit: int = 200, session_id: Optional[str] = None) -> pd.DataFrame:
         """Retrieves both open and closed trades."""
-        with self._get_connection() as conn:
-            if session_id:
-                if self.is_postgres:
-                    query = "SELECT * FROM live_trades WHERE source = %s ORDER BY id DESC LIMIT %s"
-                    return pd.read_sql_query(query, conn, params=(session_id, int(limit)))
-                else:
-                    query = "SELECT * FROM live_trades WHERE source = ? ORDER BY id DESC LIMIT ?"
-                    return pd.read_sql_query(query, conn, params=(session_id, int(limit)))
-            query = f"SELECT * FROM live_trades ORDER BY id DESC LIMIT {int(limit)}"
-            return pd.read_sql_query(query, conn)
+        ph = "%s" if self.is_postgres else "?"
+        if session_id:
+            query = f"SELECT * FROM live_trades WHERE source = {ph} ORDER BY id DESC LIMIT {int(limit)}"
+            return self._read_sql_df(query, (session_id,))
+        query = f"SELECT * FROM live_trades ORDER BY id DESC LIMIT {int(limit)}"
+        return self._read_sql_df(query)
 
     def get_active_order(self, session_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Retrieves the single active trade currently open, if any."""
@@ -618,13 +625,13 @@ class TradeAuditDB:
 
     def get_recent_telemetry_df(self, limit: int = 50) -> pd.DataFrame:
         """Retrieves recent AI inference logs."""
-        with self._get_connection() as conn:
-            return pd.read_sql_query(f"SELECT * FROM ai_telemetry_log ORDER BY id DESC LIMIT {int(limit)}", conn)
+        query = f"SELECT * FROM ai_telemetry_log ORDER BY id DESC LIMIT {int(limit)}"
+        return self._read_sql_df(query)
 
     def get_simulation_runs_df(self, limit: int = 20) -> pd.DataFrame:
         """Retrieves historical backtest audit runs."""
-        with self._get_connection() as conn:
-            return pd.read_sql_query(f"SELECT * FROM simulation_runs ORDER BY id DESC LIMIT {int(limit)}", conn)
+        query = f"SELECT * FROM simulation_runs ORDER BY id DESC LIMIT {int(limit)}"
+        return self._read_sql_df(query)
 
     def record_auth_event(
         self,
@@ -710,22 +717,21 @@ class TradeAuditDB:
         session_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """Builds a comprehensive audit evaluation package from closed live trades."""
-        with self._get_connection() as conn:
-            query = "SELECT * FROM live_trades WHERE status = 'CLOSED'"
-            params = []
-            param_placeholder = "%s" if self.is_postgres else "?"
-            if session_id:
-                query += f" AND source = {param_placeholder}"
-                params.append(session_id)
-            if start_date:
-                query += f" AND open_time >= {param_placeholder}"
-                params.append(start_date)
-            if end_date:
-                query += f" AND open_time <= {param_placeholder}"
-                params.append(end_date)
-            query += " ORDER BY id ASC"
-            
-            df = pd.read_sql_query(query, conn, params=tuple(params) if params else None)
+        query = "SELECT * FROM live_trades WHERE status = 'CLOSED'"
+        params = []
+        param_placeholder = "%s" if self.is_postgres else "?"
+        if session_id:
+            query += f" AND source = {param_placeholder}"
+            params.append(session_id)
+        if start_date:
+            query += f" AND open_time >= {param_placeholder}"
+            params.append(start_date)
+        if end_date:
+            query += f" AND open_time <= {param_placeholder}"
+            params.append(end_date)
+        query += " ORDER BY id ASC"
+        
+        df = self._read_sql_df(query, tuple(params) if params else None)
 
         if df.empty:
             return {
