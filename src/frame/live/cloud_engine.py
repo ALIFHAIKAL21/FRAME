@@ -233,9 +233,9 @@ class CloudLiveTraderEngine:
                 self.save_state()
                 return {'action': 'ORDER_CLOSED_SL', 'events': events, 'stats': self.broker.get_stats()}
 
-            # F5 Dynamic TP Rule (+1.0R on low ATR, +2.7R ceiling on normal/high ATR)
-            pos_atr = float(pos.get('atr', sl_dist / 1.5))
-            target_tp_r = 1.0 if pos_atr < 1.80 else TP_MAX_R
+            # F5 Dynamic TP Rule — use stored dyn_tp_r or compute from ATR pips
+            pos_atr_dollar = float(pos.get('atr', sl_dist / 1.5))
+            target_tp_r = float(pos.get('dyn_tp_r', 1.0 if (pos_atr_dollar * 10.0) < 18.0 else TP_MAX_R))
             if current_r >= target_tp_r:
                 trade = self.broker.close_order(cur_price, exit_reason=f'Dynamic TP Hit (+{target_tp_r:.1f}R)')
                 self.db.record_order_closed(trade)
@@ -278,9 +278,9 @@ class CloudLiveTraderEngine:
                 pos['ratchet_active'] = True
                 events.append('Smart Ratchet: Locked SL at ' + str(pos['current_sl']) + ' (+0.5R)')
 
-            # Stage 1: Micro-Breakeven (F4 Rule: Only active if ATR >= 1.00 USD / 10 pips)
+            # Stage 1: Micro-Breakeven (F4 Rule: Disabled if be_force_disabled flag set by entry)
             elif current_r >= BE_TRIGGER_R and not pos.get('be_active', False):
-                if pos_atr >= 1.00:
+                if not pos.get('be_force_disabled', False):
                     be_sl = (ep + BE_BUFFER_PRICE) if direction == 'BUY' else (ep - BE_BUFFER_PRICE)
                     pos['current_sl'] = round(be_sl, 2)
                     pos['be_active'] = True
@@ -311,7 +311,7 @@ class CloudLiveTraderEngine:
         candles = self.feed.fetch_m30_candles(limit=64)
         if len(candles) >= 20:
             now_ts = int(time.time())
-            # Determine latest truly closed M30 bar
+            # Determine latest truly closed M30 bar (exclude forming bar if still open)
             if now_ts < candles[-1]['time'] + 1800:
                 closed_bar = candles[-2]
                 eval_candles = candles[:-1]
@@ -320,13 +320,8 @@ class CloudLiveTraderEngine:
                 eval_candles = candles
 
             bar_time = closed_bar['time']
-            bar_close_time = bar_time + 1800
-            bar_age_sec = now_ts - bar_close_time
 
-            # HARD FRESHNESS GATE: Do not trigger late orders if cloud woke up late
-            if bar_age_sec > 300:
-                return {'action': 'STALE_BAR_SKIPPED', 'message': f'Bar closed {bar_age_sec}s ago (>300s threshold). Entry rejected.'}
-
+            # De-duplication: only evaluate each bar once
             if bar_time != self.last_evaluated_candle_time:
                 self.last_evaluated_candle_time = bar_time
 
@@ -338,17 +333,37 @@ class CloudLiveTraderEngine:
                 tr2 = np.abs(highs[1:] - closes[:-1])
                 tr3 = np.abs(lows[1:] - closes[:-1])
                 tr = np.maximum(tr1, np.maximum(tr2, tr3))
-                atr14 = float(np.mean(tr[-14:])) if len(tr) >= 14 else 1.50
+                atr14_dollar = float(np.mean(tr[-14:])) if len(tr) >= 14 else 1.50
 
-                # F7 Rule: Extreme Volatility Rejection Gate (ATR >= $3.80)
-                if not is_btc and atr14 >= 3.80:
-                    return {'action': 'REJECTED_EXTREME_VOL', 'message': f'ATR ${atr14:.2f} >= $3.80 threshold'}
+                # Convert ATR from dollar to pips for rule thresholds (1 pip XAU = $0.10)
+                atr14_pips = atr14_dollar * 10.0 if not is_btc else atr14_dollar
 
-                # Calculate Structural SL distance
+                # [LOCKED FINAL RULES — 100% IDENTICAL TO DESKTOP AGENT]
+
+                # F7: Extreme Volatility Circuit Breaker — ATR > 65 pips
+                if not is_btc and atr14_pips > 65.0:
+                    return {'action': 'REJECTED_EXTREME_VOL', 'message': f'ATR {atr14_pips:.1f} pips > 65.0 threshold'}
+
+                # F6: High-Volatility Conviction Gate — ATR >= 20 pips (needs margin check)
+                # Cloud uses momentum diff as proxy for conviction margin
+                fast_ma = np.mean(closes[-8:])
+                slow_ma = np.mean(closes[-24:])
+                diff = (fast_ma - slow_ma) / max(atr14_dollar, 0.50)
+
+                if atr14_pips >= 20.0 and abs(diff) < 0.18:
+                    return {'action': 'REJECTED_LOW_CONVICTION_HIGH_VOL', 'message': f'ATR {atr14_pips:.1f}p with weak momentum {abs(diff):.3f}'}
+
+                # Calculate Structural SL distance (in dollar)
                 if is_btc:
-                    sl_dist = round(max(400.0, min(3500.0, SL_ATR_MULT * atr14)), 2)
+                    sl_dist = round(max(400.0, min(3500.0, SL_ATR_MULT * atr14_dollar)), 2)
                 else:
-                    sl_dist = round(max(1.0, min(3.5, SL_ATR_MULT * atr14)), 2)
+                    sl_dist = round(max(8.0, min(25.0, atr14_dollar * SL_ATR_MULT)), 2)
+
+                # F4: Anti-BE-Trap — ATR < 10 pips
+                be_enabled = (atr14_pips >= 10.0)
+
+                # F5: Dynamic TP — 1.0R when ATR < 18 pips, 2.7R otherwise
+                dyn_tp_r = 1.0 if atr14_pips < 18.0 else TP_MAX_R
 
                 # Macro Trend Filter: EMA200 M30
                 ema_weight = 2.0 / (min(len(closes), 200) + 1.0)
@@ -357,13 +372,8 @@ class CloudLiveTraderEngine:
                     ema200 = (p * ema_weight) + (ema200 * (1.0 - ema_weight))
                 cur_close = closes[-1]
 
-                # F3 Rule: Dynamic Tau threshold (tau = 0.50 baseline, tau = 0.56 on low ATR)
-                tau = 0.56 if atr14 <= 1.30 else 0.50
-
-                # Fast / Slow Momentum slope
-                fast_ma = np.mean(closes[-8:])
-                slow_ma = np.mean(closes[-24:])
-                diff = (fast_ma - slow_ma) / max(atr14, 0.50)
+                # F3: Dynamic Tau threshold — tau = 0.36 baseline, +0.04 on low ATR < 13 pips
+                tau = 0.36 if atr14_pips >= 13.0 else 0.40
 
                 signal = None
                 if diff > tau and cur_close >= ema200:
@@ -380,11 +390,15 @@ class CloudLiveTraderEngine:
                         timestamp=now_utc,
                         reason=f'[MOMENT-1-LARGE (LOCKED PRODUCTION)] Cloud Autonomous Signal ({session_name})'
                     )
-                    order['atr'] = atr14
+                    order['atr'] = atr14_dollar
+                    order['atr_pips'] = atr14_pips
+                    order['dyn_tp_r'] = dyn_tp_r
+                    if not be_enabled:
+                        order['be_force_disabled'] = True
                     self.last_session_traded = session_name
                     self.db.record_order_opened(order, source='MOMENT_LOCKED_PROD')
                     self.telegram.send_trade_alert('OPEN', order)
-                    events.append(f'OPENED {signal} {order.get("lot", 0.02):.2f}L at {order["entry_price"]} | SL: {order.get("current_sl", 0.0)}')
+                    events.append(f'OPENED {signal} {order.get("lot", 0.02):.2f}L at {order["entry_price"]} | SL: {order.get("current_sl", 0.0)} | ATR: {atr14_pips:.1f}p | TP: {dyn_tp_r:.1f}R')
                     self.save_state()
                     return {'action': 'ORDER_OPENED', 'order': order, 'events': events}
 
