@@ -256,6 +256,7 @@ if "cron_ping" in params or "ping" in params:
         "is_armed": cloud_engine.is_armed,
         "broker_balance": cloud_engine.broker.cash,
         "has_open_position": cloud_engine.broker.open_position is not None,
+        "onnx_model_active": cloud_engine.onnx_session is not None,
         "cloud_engine_step": exec_report
     }))
     st.stop()

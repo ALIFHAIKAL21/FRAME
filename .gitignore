@@ -30,9 +30,11 @@ scratch/
 checkpoints/*.pt
 checkpoints/*.pth
 checkpoints/*.safetensors
+checkpoints/*.data
 *.pt
 *.pth
 *.bin
 *.npy
+*.lock
 data/processed/
 logs/*
