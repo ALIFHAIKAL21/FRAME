@@ -310,14 +310,29 @@ class CloudLiveTraderEngine:
 
         candles = self.feed.fetch_m30_candles(limit=64)
         if len(candles) >= 20:
-            latest_bar = candles[-1]
-            bar_time = latest_bar['time']
+            now_ts = int(time.time())
+            # Determine latest truly closed M30 bar
+            if now_ts < candles[-1]['time'] + 1800:
+                closed_bar = candles[-2]
+                eval_candles = candles[:-1]
+            else:
+                closed_bar = candles[-1]
+                eval_candles = candles
+
+            bar_time = closed_bar['time']
+            bar_close_time = bar_time + 1800
+            bar_age_sec = now_ts - bar_close_time
+
+            # HARD FRESHNESS GATE: Do not trigger late orders if cloud woke up late
+            if bar_age_sec > 300:
+                return {'action': 'STALE_BAR_SKIPPED', 'message': f'Bar closed {bar_age_sec}s ago (>300s threshold). Entry rejected.'}
+
             if bar_time != self.last_evaluated_candle_time:
                 self.last_evaluated_candle_time = bar_time
 
-                closes = np.array([c['close'] for c in candles])
-                highs = np.array([c['high'] for c in candles])
-                lows = np.array([c['low'] for c in candles])
+                closes = np.array([c['close'] for c in eval_candles])
+                highs = np.array([c['high'] for c in eval_candles])
+                lows = np.array([c['low'] for c in eval_candles])
 
                 tr1 = highs[1:] - lows[1:]
                 tr2 = np.abs(highs[1:] - closes[:-1])

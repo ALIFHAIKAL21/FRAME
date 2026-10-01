@@ -45,7 +45,7 @@ class HeadlessLiveTrader:
     def _wire_signals(self):
         # Feed -> Agent & Broker
         self.feed.tick_received.connect(self.agent.on_tick)
-        self.feed.candle_updated.connect(self._on_candle_updated)
+        self.feed.m30_candle_closed.connect(self._on_m30_candle_closed)
         self.feed.connection_changed.connect(self._on_connection_changed)
 
         # Agent -> Events
@@ -58,8 +58,8 @@ class HeadlessLiveTrader:
         status_tag = "[CONNECTED]" if connected else "[DISCONNECTED]"
         print(f"[{datetime.now().strftime('%H:%M:%S')}] {status_tag} Feed Source: {source} | {msg}")
 
-    def _on_candle_updated(self, candle: dict):
-        self.agent.on_candle_closed(candle, self.feed.get_recent_candles() if hasattr(self.feed, 'get_recent_candles') else [])
+    def _on_m30_candle_closed(self, candle: dict):
+        self.agent.on_candle_closed(candle, self.feed.get_m30_history())
 
 
     def _on_order_opened(self, pos: dict):

@@ -218,8 +218,41 @@ class FrameMasterCockpit(QMainWindow):
                 self.live_workstation.feed.stop()
         except Exception:
             pass
+        # Clean up lockfile
+        lock_file = project_root / "data" / "frame_instance.lock"
+        try:
+            if lock_file.exists():
+                lock_file.unlink(missing_ok=True)
+        except Exception:
+            pass
         event.accept()
         QApplication.quit()
+        import os
+        os._exit(0)
+
+
+def _check_and_acquire_lock() -> bool:
+    lock_file = project_root / "data" / "frame_instance.lock"
+    lock_file.parent.mkdir(parents=True, exist_ok=True)
+    if lock_file.exists():
+        try:
+            with open(lock_file, "r") as f:
+                old_pid = int(f.read().strip())
+            import psutil, os
+            if old_pid != os.getpid() and psutil.pid_exists(old_pid):
+                proc = psutil.Process(old_pid)
+                pname = proc.name().lower()
+                if "python" in pname or "frame" in pname:
+                    return False  # Already active
+        except Exception:
+            pass
+    try:
+        import os
+        with open(lock_file, "w") as f:
+            f.write(str(os.getpid()))
+    except Exception:
+        pass
+    return True
 
 
 def run_frame_app():
@@ -227,16 +260,32 @@ def run_frame_app():
     app.setApplicationName("FRAME")
     app.setOrganizationName("FLOWDEV")
 
+    if not _check_and_acquire_lock():
+        QMessageBox.warning(
+            None,
+            "FRAME Already Running",
+            "An active instance of FLOWDEV FRAME is already running in your system.\n\n"
+            "Please switch to the currently open window, or close it before launching a new session."
+        )
+        sys.exit(0)
+
     user = DesktopAuthGatekeeper.try_restore_session()
     if not user:
         gate = DesktopAuthGatekeeper()
         if gate.exec() != QDialog.Accepted:
+            # Clean lock
+            lock_file = project_root / "data" / "frame_instance.lock"
+            if lock_file.exists(): lock_file.unlink(missing_ok=True)
             sys.exit(0)
         user = gate.authenticated_user
 
     master = FrameMasterCockpit(operator_user=user)
     master.show()
-    sys.exit(app.exec())
+    exit_code = app.exec()
+    lock_file = project_root / "data" / "frame_instance.lock"
+    if lock_file.exists(): lock_file.unlink(missing_ok=True)
+    import os
+    os._exit(exit_code)
 
 
 if __name__ == "__main__":

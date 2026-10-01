@@ -529,14 +529,27 @@ class LiveMarketFeed(QObject):
         This feeds the AI agent with correct M30 data regardless of chart display timeframe."""
         bar_start_ts = (ts // self._M30_DURATION) * self._M30_DURATION
 
-        if self._m30_candle is None or self._m30_candle["time"] != bar_start_ts:
-            # Previous M30 candle just closed
-            if self._m30_candle is not None:
-                self._m30_candle["is_closed"] = True
-                self._m30_history.append(dict(self._m30_candle))
-                if len(self._m30_history) > 120:
-                    self._m30_history.pop(0)
-                self.m30_candle_closed.emit(self._m30_candle)
+        if self._m30_candle is None:
+            # First tick of live session: initialize forming candle cleanly (do NOT emit false close event)
+            self._m30_candle = {
+                "time": bar_start_ts,
+                "open": price,
+                "high": price,
+                "low": price,
+                "close": price,
+                "volume": 1,
+                "is_closed": False
+            }
+            self.m30_candle_updated.emit(self._m30_candle)
+            return
+
+        if self._m30_candle["time"] != bar_start_ts:
+            # Previous live M30 candle just rolled over in real-time
+            self._m30_candle["is_closed"] = True
+            self._m30_history.append(dict(self._m30_candle))
+            if len(self._m30_history) > 120:
+                self._m30_history.pop(0)
+            self.m30_candle_closed.emit(self._m30_candle)
 
             # Start fresh M30 candle
             self._m30_candle = {
@@ -562,8 +575,8 @@ class LiveMarketFeed(QObject):
         return list(self._m30_history)
 
     def _seed_m30_history_from_candles(self, candles: list):
-        """Seeds the M30 history buffer from loaded candles (called once on connect)."""
+        """Seeds the M30 history buffer from loaded candles (called once on connect).
+        Historical candles are already closed; self._m30_candle is kept None until the first live tick."""
         self._m30_history = list(candles)
-        if self._m30_history:
-            self._m30_candle = dict(self._m30_history[-1])
+        self._m30_candle = None
         self.m30_history_loaded.emit(list(self._m30_history))

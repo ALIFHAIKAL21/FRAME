@@ -244,6 +244,14 @@ class LiveAgent(QObject):
         if self.broker.open_position is not None:
             return
 
+        # HARD FRESHNESS GATE: Prevent stale execution / late startup triggers
+        # Only enter trade if the candle closed within the last 180 seconds (3 minutes)
+        bar_close_time = c_time + 1800
+        bar_age_sec = time.time() - bar_close_time
+        MAX_EXECUTION_GRACE_SEC = 180  # 3 minutes execution grace window
+        if bar_age_sec > MAX_EXECUTION_GRACE_SEC:
+            return
+
         # Check session eligibility
         dt_utc = datetime.fromtimestamp(c_time, timezone.utc)
         is_btc = "BTC" in self.symbol.upper()
